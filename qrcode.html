@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>AVA Fit — Expo Go QR</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+ background: #0a0f1a;
+ min-height: 100vh;
+ display: flex;
+ flex-direction: column;
+ align-items: center;
+ justify-content: center;
+ font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+ color: #e0e0e0;
+ padding: 20px;
+}
+.card {
+ background: #111827;
+ border: 1px solid #1e293b;
+ border-radius: 24px;
+ padding: 40px;
+ text-align: center;
+ max-width: 400px;
+}
+h1 {
+ font-size: 24px;
+ font-weight: 700;
+ margin-bottom: 4px;
+ background: linear-gradient(135deg, #06b6d4, #22d3ee);
+ -webkit-background-clip: text;
+ -webkit-text-fill-color: transparent;
+}
+.subtitle {
+ font-size: 14px;
+ color: #6b7280;
+ margin-bottom: 24px;
+}
+#qrcode {
+ background: white;
+ padding: 16px;
+ border-radius: 16px;
+ display: inline-block;
+ margin-bottom: 24px;
+}
+.steps {
+ text-align: left;
+ margin-bottom: 20px;
+}
+.step {
+ display: flex;
+ align-items: flex-start;
+ gap: 12px;
+ margin-bottom: 12px;
+ font-size: 13px;
+ color: #9ca3af;
+ line-height: 1.5;
+}
+.step-num {
+ width: 24px;
+ height: 24px;
+ background: #06b6d4;
+ color: #0a0f1a;
+ border-radius: 50%;
+ display: flex;
+ align-items: center;
+ justify-content: center;
+ font-weight: 700;
+ font-size: 12px;
+ flex-shrink: 0;
+}
+.alt-url {
+ background: #0a0f1a;
+ border: 1px solid #1e293b;
+ border-radius: 12px;
+ padding: 12px;
+ font-family: 'SF Mono', monospace;
+ font-size: 12px;
+ color: #22d3ee;
+ word-break: break-all;
+}
+</style>
+<script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+</head>
+<body>
+<div class="card">
+ <h1>AVA Fit</h1>
+ <p class="subtitle">Scan to open in Expo Go</p>
+ <div id="qrcode"></div>
+ <div class="steps">
+ <div class="step"><span class="step-num">1</span><span>Install <strong>Expo Go</strong> from the App Store</span></div>
+ <div class="step"><span class="step-num">2</span><span>Make sure your iPhone is on the <strong>same WiFi</strong> as this PC</span></div>
+ <div class="step"><span class="step-num">3</span><span>Open the camera app and <strong>point at this QR code</strong></span></div>
+ <div class="step"><span class="step-num">4</span><span>Tap the notification to open in <strong>Expo Go</strong></span></div>
+ </div>
+ <p style="font-size: 11px; color: #6b7280; margin-bottom: 8px;">Or enter this URL in Expo Go manually:</p>
+ <div class="alt-url">exp://192.168.1.4:8081</div>
+</div>
+<script>
+ QRCode.toCanvas(document.getElementById('qrcode'), 'exp://192.168.1.4:8081', {
+ width: 240,
+ margin: 0,
+ color: { dark: '#0a0f1a', light: '#ffffff' }
+ }, function(error) { if (error) console.error(error); });
+</script>
+</body>
+</html>

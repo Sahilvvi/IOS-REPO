@@ -1,0 +1,55 @@
+{
+  "expo": {
+    "name": "AVA Fit",
+    "slug": "ava-fit-ios",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "scheme": "avafit",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#070A11",
+    "icon": "./assets/icon.png",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.quorumprosthetics.avafit",
+      "infoPlist": {
+        "NSBluetoothAlwaysUsageDescription": "AVA Fit uses Bluetooth to read pressure data from your prosthetic socket sensors.",
+        "NSBluetoothPeripheralUsageDescription": "AVA Fit connects to your prosthetic socket to monitor socket fit in real time.",
+        "NSHealthShareUsageDescription": "AVA Fit reads your step count to track daily activity alongside your socket wear data."
+      }
+    },
+    "android": {
+      "package": "com.quorumprosthetics.avafit",
+      "edgeToEdgeEnabled": true,
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/icon.png",
+        "backgroundColor": "#070A11"
+      },
+      "permissions": [
+        "android.permission.BLUETOOTH",
+        "android.permission.BLUETOOTH_ADMIN",
+        "android.permission.BLUETOOTH_CONNECT",
+        "android.permission.BLUETOOTH_SCAN",
+        "android.permission.ACCESS_FINE_LOCATION"
+      ]
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "static"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-font",
+      "expo-secure-store"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "122540dc-f962-4093-953c-d9e59dd2f627"
+      }
+    },
+    "owner": "admin1110000"
+  }
+}
