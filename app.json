@@ -14,7 +14,8 @@
       "infoPlist": {
         "NSBluetoothAlwaysUsageDescription": "AVA Fit uses Bluetooth to read pressure data from your prosthetic socket sensors.",
         "NSBluetoothPeripheralUsageDescription": "AVA Fit connects to your prosthetic socket to monitor socket fit in real time.",
-        "NSHealthShareUsageDescription": "AVA Fit reads your step count to track daily activity alongside your socket wear data."
+        "NSHealthShareUsageDescription": "AVA Fit reads your step count to track daily activity alongside your socket wear data.",
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
