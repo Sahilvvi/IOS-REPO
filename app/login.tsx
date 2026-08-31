@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -7,18 +7,35 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
-  Animated,
   useWindowDimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import Animated, { FadeInDown } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
-import { Btn } from '@/components/ui';
-import { AuroraBackground } from '@/components/AuroraBackground';
+import { GlowButton } from '@/components/GlowButton';
+import { SensorGridTexture, CornerRing } from '@/components/InstrumentBackdrop';
 import { useAuth } from '@/context/AuthContext';
-import { color, font, space, radius } from '@/theme/tokens';
+import { color, font, space } from '@/theme/tokens';
 
 type Mode = 'signin' | 'signup';
+
+const COPY: Record<Mode, { title: string; sub: string; cta: string; switchLabel: string; switchAction: string }> = {
+  signin: {
+    title: 'Welcome\nback.',
+    sub: "Sign in to check today's fit.",
+    cta: 'SIGN IN',
+    switchLabel: 'New here?',
+    switchAction: 'Create an account',
+  },
+  signup: {
+    title: 'Set up your\naccount.',
+    sub: 'One profile, synced across your care team.',
+    cta: 'CREATE ACCOUNT',
+    switchLabel: 'Already have an account?',
+    switchAction: 'Sign in',
+  },
+};
 
 export default function LoginScreen() {
   const { configured, signIn, signUp } = useAuth();
@@ -26,18 +43,12 @@ export default function LoginScreen() {
   const [mode, setMode] = useState<Mode>('signin');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmSent, setConfirmSent] = useState(false);
 
-  const fade = useRef(new Animated.Value(0)).current;
-  const rise = useRef(new Animated.Value(16)).current;
-  useEffect(() => {
-    Animated.parallel([
-      Animated.timing(fade, { toValue: 1, duration: 500, useNativeDriver: true }),
-      Animated.timing(rise, { toValue: 0, duration: 500, useNativeDriver: true }),
-    ]).start();
-  }, [fade, rise]);
+  const copy = COPY[mode];
 
   const submit = async () => {
     setError(null);
@@ -46,9 +57,15 @@ export default function LoginScreen() {
       setError('Enter an email and password.');
       return;
     }
-    if (mode === 'signup' && password.length < 6) {
-      setError('Password must be at least 6 characters.');
-      return;
+    if (mode === 'signup') {
+      if (password.length < 6) {
+        setError('Password must be at least 6 characters.');
+        return;
+      }
+      if (password !== confirmPassword) {
+        setError('Passwords don’t match.');
+        return;
+      }
     }
     setBusy(true);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -71,9 +88,8 @@ export default function LoginScreen() {
     }
   };
 
-  const switchMode = (next: Mode) => {
-    if (next === mode) return;
-    setMode(next);
+  const switchMode = () => {
+    setMode((m) => (m === 'signin' ? 'signup' : 'signin'));
     setError(null);
     setConfirmSent(false);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -81,110 +97,98 @@ export default function LoginScreen() {
 
   return (
     <View style={styles.root}>
-      <AuroraBackground width={width} height={height} />
+      <SensorGridTexture width={width} height={height} fade="top" />
       <SafeAreaView style={styles.safe}>
-        <KeyboardAvoidingView
-          style={{ flex: 1 }}
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        >
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
           <ScrollView
             contentContainerStyle={styles.scroll}
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
           >
-            <Animated.View style={{ opacity: fade, transform: [{ translateY: rise }] }}>
-              <View style={styles.brand}>
-                <View style={styles.markGlow}>
-                  <View style={styles.markRing}>
-                    <View style={styles.mark}>
-                      <Ionicons name="pulse" size={30} color={color.cyan} />
-                    </View>
-                  </View>
-                </View>
-                <Text style={styles.appName}>AVA Fit</Text>
-                <Text style={styles.tagline}>Prosthetic socket fit, monitored in real time</Text>
-              </View>
+            <View style={styles.heroRow}>
+              <CornerRing size={260} progress={mode === 'signin' ? 0.22 : 0.42} />
+            </View>
 
-              <View style={styles.card}>
-                <View style={styles.tabRow}>
-                  <ModeTab label="Sign In" active={mode === 'signin'} onPress={() => switchMode('signin')} />
-                  <ModeTab label="Create Account" active={mode === 'signup'} onPress={() => switchMode('signup')} />
-                </View>
+            <View key={mode}>
+              <Animated.Text entering={FadeInDown.delay(40).springify().damping(16)} style={styles.eyebrow}>
+                AVA FIT{' '}·{' '}SOCKET MONITOR
+              </Animated.Text>
+              <Animated.Text entering={FadeInDown.delay(100).springify().damping(16)} style={styles.title}>
+                {copy.title}
+              </Animated.Text>
+              <Animated.View entering={FadeInDown.delay(140).springify().damping(16)} style={styles.rule} />
+              <Animated.Text entering={FadeInDown.delay(160).springify().damping(16)} style={styles.sub}>
+                {copy.sub}
+              </Animated.Text>
 
-                {!configured ? (
-                  <Text style={styles.error}>
-                    Cloud sync isn't configured for this build — sign-in is unavailable right now.
+              {!configured ? (
+                <Text style={[styles.error, { marginTop: space.lg }]}>
+                  Cloud sync isn't configured for this build — sign-in is unavailable right now.
+                </Text>
+              ) : confirmSent ? (
+                <Animated.View entering={FadeInDown.delay(200).springify()} style={styles.confirmBox}>
+                  <Ionicons name="mail-open-outline" size={26} color={color.cyan} style={{ marginBottom: space.sm }} />
+                  <Text style={styles.confirmTitle}>Check your email</Text>
+                  <Text style={styles.confirmBody}>
+                    We sent a confirmation link to {email.trim()}. Tap it, then come back and sign in.
                   </Text>
-                ) : confirmSent ? (
-                  <View style={styles.confirmBox}>
-                    <Ionicons name="mail-open-outline" size={28} color={color.cyan} style={{ marginBottom: space.sm }} />
-                    <Text style={styles.confirmTitle}>Check your email</Text>
-                    <Text style={styles.confirmBody}>
-                      We sent a confirmation link to {email.trim()}. Tap it, then come back and sign in.
-                    </Text>
-                    <Btn tone="cyan" onPress={() => switchMode('signin')} style={{ marginTop: space.md, alignSelf: 'stretch' }}>
-                      Back to Sign In
-                    </Btn>
-                  </View>
-                ) : (
-                  <>
-                    <View style={styles.inputRow}>
-                      <Ionicons name="mail-outline" size={17} color={color.textFaint} style={styles.inputIcon} />
-                      <TextInput
-                        value={email}
-                        onChangeText={setEmail}
-                        placeholder="Email"
-                        placeholderTextColor={color.textFaint}
-                        autoCapitalize="none"
-                        autoCorrect={false}
-                        keyboardType="email-address"
-                        style={styles.input}
-                      />
-                    </View>
-                    <View style={{ height: space.sm }} />
-                    <View style={styles.inputRow}>
-                      <Ionicons name="lock-closed-outline" size={17} color={color.textFaint} style={styles.inputIcon} />
-                      <TextInput
-                        value={password}
-                        onChangeText={setPassword}
-                        placeholder="Password"
-                        placeholderTextColor={color.textFaint}
-                        secureTextEntry
-                        style={styles.input}
-                      />
-                    </View>
-                    {error && (
-                      <View style={styles.errorRow}>
-                        <Ionicons name="alert-circle-outline" size={13} color={color.red} />
-                        <Text style={styles.error}>{error}</Text>
-                      </View>
-                    )}
-                    <View style={styles.btnShadow}>
-                      <Btn tone="cyan" onPress={submit} style={{ marginTop: space.md }}>
-                        {busy ? 'Please wait…' : mode === 'signin' ? 'Sign In' : 'Create Account'}
-                      </Btn>
-                    </View>
-                  </>
-                )}
-              </View>
+                  <GlowButton label="BACK TO SIGN IN" icon="arrow-back" onPress={switchMode} style={{ marginTop: space.lg, alignSelf: 'stretch' }} />
+                </Animated.View>
+              ) : (
+                <Animated.View entering={FadeInDown.delay(200).springify().damping(16)} style={{ marginTop: space.xl }}>
+                  <Field label="EMAIL" value={email} onChangeText={setEmail} placeholder="you@email.com" keyboardType="email-address" accent={false} />
+                  <Field label="PASSWORD" value={password} onChangeText={setPassword} placeholder="••••••••" secureTextEntry accent={mode === 'signin'} />
+                  {mode === 'signup' && (
+                    <Field label="CONFIRM PASSWORD" value={confirmPassword} onChangeText={setConfirmPassword} placeholder="••••••••" secureTextEntry accent />
+                  )}
 
-              <Text style={styles.disclaimer}>
-                AVA Fit is a clinical research tool. Not a substitute for professional medical assessment.
-              </Text>
-            </Animated.View>
+                  {error && <Text style={styles.error}>{error}</Text>}
+
+                  <GlowButton
+                    label={busy ? 'PLEASE WAIT…' : copy.cta}
+                    onPress={submit}
+                    disabled={busy}
+                    style={{ marginTop: space.lg }}
+                  />
+
+                  <Text style={styles.switchRow}>
+                    {copy.switchLabel}{' '}
+                    <Text style={styles.switchLink} onPress={switchMode}>{copy.switchAction}</Text>
+                  </Text>
+                </Animated.View>
+              )}
+            </View>
           </ScrollView>
+
+          <Text style={styles.disclaimer}>
+            AVA Fit is a clinical research tool. Not a substitute for professional medical assessment.
+          </Text>
         </KeyboardAvoidingView>
       </SafeAreaView>
     </View>
   );
 }
 
-function ModeTab({ label, active, onPress }: { label: string; active: boolean; onPress: () => void }) {
+function Field({
+  label, value, onChangeText, placeholder, secureTextEntry, keyboardType, accent,
+}: {
+  label: string; value: string; onChangeText: (v: string) => void; placeholder: string;
+  secureTextEntry?: boolean; keyboardType?: 'email-address'; accent: boolean;
+}) {
   return (
-    <View style={{ flex: 1 }}>
-      <Text onPress={onPress} style={[styles.tab, active && styles.tabActive]}>
-        {label}
-      </Text>
+    <View style={styles.field}>
+      <Text style={styles.fieldLabel}>{label}</Text>
+      <TextInput
+        value={value}
+        onChangeText={onChangeText}
+        placeholder={placeholder}
+        placeholderTextColor={color.textFaint}
+        autoCapitalize="none"
+        autoCorrect={false}
+        secureTextEntry={secureTextEntry}
+        keyboardType={keyboardType}
+        style={[styles.input, accent && styles.inputAccent]}
+      />
     </View>
   );
 }
@@ -192,114 +196,37 @@ function ModeTab({ label, active, onPress }: { label: string; active: boolean; o
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: color.bg },
   safe: { flex: 1 },
-  scroll: { flexGrow: 1, justifyContent: 'center', padding: space.lg },
-  brand: { alignItems: 'center', marginBottom: space.xl },
-  markGlow: {
-    width: 104,
-    height: 104,
-    borderRadius: 52,
-    backgroundColor: color.cyan + '14',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: space.lg,
-  },
-  markRing: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    borderWidth: 1.5,
-    borderColor: color.cyan + '55',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  mark: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: color.panelGradTop,
-    borderWidth: 1,
-    borderColor: color.cyan + '80',
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: color.cyan,
-    shadowOpacity: 0.5,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: 0 },
-  },
-  appName: { fontFamily: font.bodyXbold, fontSize: 26, color: color.text, letterSpacing: 0.3 },
-  tagline: { fontFamily: font.body, fontSize: 13, color: color.textDim, marginTop: 6, textAlign: 'center', maxWidth: 260 },
-  card: {
-    padding: space.lg,
-    backgroundColor: color.panel + 'F2',
-    borderWidth: 1,
-    borderColor: color.line,
-    borderRadius: radius.lg,
-    shadowColor: '#000',
-    shadowOpacity: 0.35,
-    shadowRadius: 24,
-    shadowOffset: { width: 0, height: 12 },
-  },
-  tabRow: {
-    flexDirection: 'row',
-    backgroundColor: color.panelDeep,
-    borderRadius: radius.sm + 2,
-    padding: 4,
-    marginBottom: space.lg,
-  },
-  tab: {
-    fontFamily: font.monoMed,
-    fontSize: 11,
-    letterSpacing: 0.5,
-    color: color.textFaint,
-    textAlign: 'center',
-    paddingVertical: 11,
-    borderRadius: radius.sm - 2,
-    overflow: 'hidden',
-  },
-  tabActive: {
-    backgroundColor: color.cyan,
-    color: color.cyanInk,
-    fontFamily: font.monoMed,
-  },
-  inputRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: color.line,
-    backgroundColor: color.panelDeep,
-    borderRadius: radius.sm,
-    paddingHorizontal: space.sm,
-  },
-  inputIcon: { marginRight: 8 },
+  scroll: { flexGrow: 1, padding: space.xl, paddingTop: space.xxl + space.lg },
+  heroRow: { height: 0 },
+  eyebrow: { fontFamily: font.monoMed, fontSize: 11, letterSpacing: 2.5, color: color.textFaint, marginBottom: space.lg },
+  title: { fontFamily: font.bodyXbold, fontSize: 34, lineHeight: 38, color: color.text, letterSpacing: -0.5, maxWidth: 270 },
+  rule: { width: 34, height: 2, backgroundColor: color.cyan, marginTop: space.md, marginBottom: space.sm },
+  sub: { fontFamily: font.mono, fontSize: 12, color: color.textDim, lineHeight: 18, maxWidth: 260 },
+  field: { marginBottom: space.lg },
+  fieldLabel: { fontFamily: font.monoMed, fontSize: 10, letterSpacing: 1.5, color: color.textFaint, marginBottom: 8 },
   input: {
-    flex: 1,
-    fontFamily: font.mono,
-    fontSize: 13,
+    fontFamily: font.body,
+    fontSize: 15,
     color: color.text,
-    paddingVertical: 13,
+    borderBottomWidth: 1,
+    borderBottomColor: color.line,
+    paddingVertical: 11,
+    paddingHorizontal: 2,
   },
-  errorRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: space.sm },
-  error: {
-    fontFamily: font.mono,
-    fontSize: 11,
-    color: color.red,
-    lineHeight: 16,
-  },
-  btnShadow: {
-    shadowColor: color.cyan,
-    shadowOpacity: 0.35,
-    shadowRadius: 14,
-    shadowOffset: { width: 0, height: 6 },
-  },
-  confirmBox: { alignItems: 'center', paddingVertical: space.sm },
+  inputAccent: { borderBottomColor: color.cyan },
+  error: { fontFamily: font.mono, fontSize: 11, color: color.red, marginBottom: space.md, lineHeight: 16 },
+  switchRow: { fontFamily: font.mono, fontSize: 11, color: color.textDim, marginTop: space.lg, letterSpacing: 0.3 },
+  switchLink: { color: color.cyan },
+  confirmBox: { alignItems: 'center', marginTop: space.xl, paddingVertical: space.md },
   confirmTitle: { fontFamily: font.bodySemi, fontSize: 15, color: color.text, marginBottom: space.sm },
   confirmBody: { fontFamily: font.body, fontSize: 12, color: color.textDim, textAlign: 'center', lineHeight: 18 },
   disclaimer: {
     fontFamily: font.mono,
-    fontSize: 10,
+    fontSize: 9,
     color: color.textFaint,
     textAlign: 'center',
     lineHeight: 15,
-    marginTop: space.xl,
+    paddingHorizontal: space.xl,
+    paddingBottom: space.md,
   },
 });

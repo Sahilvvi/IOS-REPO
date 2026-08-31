@@ -39,7 +39,7 @@ export default function FitScreen() {
  const device = useDevice();
  const router = useRouter();
  const { width } = useWindowDimensions();
- const { activeProfile } = useProfile();
+ const { activeProfile, updateActiveProfile } = useProfile();
  const [mesh, setMesh] = useState<PreparedMesh | null>(null);
 
  const grid = activeProfile?.grid ?? { rows: 3, cols: 6 };
@@ -182,8 +182,21 @@ export default function FitScreen() {
  </Panel>
 
  {/* Action buttons */}
+ {(activeProfile?.ply_count ?? 0) > 0 && (
+ <Text style={styles.plyHint}>
+ {activeProfile!.ply_count} sock {activeProfile!.ply_count === 1 ? 'ply' : 'plies'} added
+ </Text>
+ )}
  <Row style={styles.actionsRow}>
- <Btn tone="cyan" onPress={async () => { await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); }}>
+ <Btn tone="cyan" onPress={async () => {
+ await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+ const next = (activeProfile?.ply_count ?? 0) + 1;
+ await updateActiveProfile({ ply_count: next });
+ Alert.alert(
+ 'Sock Ply Added',
+ `Now tracking ${next} ${next === 1 ? 'ply' : 'plies'}. Adding a ply changes your baseline — re-zero once it settles.`,
+ );
+ }}>
  Add Sock Ply
  </Btn>
  <Btn tone="ghost" onPress={async () => {
@@ -353,6 +366,13 @@ const styles = StyleSheet.create({
  fontFamily: 'DM Mono_400Regular',
  fontSize: 9,
  color: color.textFaint,
+ },
+ plyHint: {
+ fontFamily: font.mono,
+ fontSize: 10,
+ color: color.textFaint,
+ marginBottom: space.sm,
+ textAlign: 'center',
  },
  actionsRow: {
  gap: space.sm,

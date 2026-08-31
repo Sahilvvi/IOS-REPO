@@ -1,32 +1,34 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, useWindowDimensions, NativeSyntheticEvent, NativeScrollEvent, Animated } from 'react-native';
+import React, { useRef, useState } from 'react';
+import { View, Text, StyleSheet, ScrollView, useWindowDimensions, NativeSyntheticEvent, NativeScrollEvent } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
+import Animated, { FadeInDown, FadeIn, Layout } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
-import { Btn } from '@/components/ui';
-import { AuroraBackground } from '@/components/AuroraBackground';
-import { FitIllustration, TrendsIllustration, ConnectIllustration } from '@/components/OnboardingIllustrations';
+import { GlowButton } from '@/components/GlowButton';
+import { SensorGridTexture, CornerRing } from '@/components/InstrumentBackdrop';
+import { HeroFitRing } from '@/components/HeroFitRing';
+import { HeroTrendChart } from '@/components/HeroTrendChart';
+import { HeroConnectDiagram } from '@/components/HeroConnectDiagram';
 import { useOnboarding } from '@/context/OnboardingContext';
 import { color, font, space } from '@/theme/tokens';
 
 const PAGES = [
   {
-    Illustration: FitIllustration,
     eyebrow: 'REAL-TIME PRESSURE MAPPING',
-    title: 'See your fit,\nin real time',
-    body: 'Eighteen sensors read pressure inside your socket continuously — AVA Fit turns that into one clear score.',
+    title: 'Feel exactly\nwhat your socket feels.',
+    body: 'Eighteen embedded sensors read pressure inside your socket, live — AVA Fit turns it into one clear score.',
+    Hero: () => <HeroFitRing size={240} score={84} />,
   },
   {
-    Illustration: TrendsIllustration,
     eyebrow: 'DAILY TRENDS',
-    title: 'Track comfort\nover time',
-    body: 'Wear time, hot spots, and trends across the week — spot what\'s working before it becomes a problem.',
+    title: 'See the pattern\nbefore it’s a problem.',
+    body: 'Wear time, hot spots, and comfort across the week, tracked automatically — so a bad day doesn’t become a bad month.',
+    Hero: () => <HeroTrendChart width={260} height={200} />,
   },
   {
-    Illustration: ConnectIllustration,
     eyebrow: 'CARE TEAM, CONNECTED',
-    title: 'Stay connected\nto your care team',
-    body: 'Share sessions with your prosthetist and log how you feel — all in one place.',
+    title: 'Your prosthetist,\nin the loop.',
+    body: 'Share sessions and log how you feel — your care team sees it without you having to explain it.',
+    Hero: () => <HeroConnectDiagram width={260} height={190} />,
   },
 ];
 
@@ -36,12 +38,6 @@ export default function OnboardingScreen() {
   const scrollRef = useRef<ScrollView>(null);
   const [page, setPage] = useState(0);
   const isLast = page === PAGES.length - 1;
-
-  const fade = useRef(new Animated.Value(0)).current;
-  useEffect(() => {
-    fade.setValue(0);
-    Animated.timing(fade, { toValue: 1, duration: 420, useNativeDriver: true }).start();
-  }, [page, fade]);
 
   const onScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
     const next = Math.round(e.nativeEvent.contentOffset.x / width);
@@ -66,7 +62,7 @@ export default function OnboardingScreen() {
 
   return (
     <View style={styles.root}>
-      <AuroraBackground width={width} height={height} />
+      <SensorGridTexture width={width} height={height} fade="radial" />
       <SafeAreaView style={{ flex: 1 }}>
         {!isLast && (
           <Text style={styles.skip} onPress={skip}>
@@ -81,16 +77,24 @@ export default function OnboardingScreen() {
           onMomentumScrollEnd={onScroll}
           style={{ flex: 1 }}
         >
-          {PAGES.map(({ Illustration, eyebrow, title, body }, i) => (
+          {PAGES.map(({ eyebrow, title, body, Hero }, i) => (
             <View key={i} style={[styles.page, { width }]}>
-              <Animated.View style={{ opacity: page === i ? fade : 1, alignItems: 'center' }}>
-                <View style={styles.illustrationGlow}>
-                  <Illustration />
+              <View style={styles.heroRow}>
+                <CornerRing size={260} progress={0.24 + i * 0.1} />
+                <View style={styles.heroBleed}>
+                  <Hero />
                 </View>
-                <Text style={styles.eyebrow}>{eyebrow}</Text>
-                <Text style={styles.title}>{title}</Text>
-                <Text style={styles.body}>{body}</Text>
-              </Animated.View>
+              </View>
+
+              <Animated.Text entering={FadeInDown.delay(80).springify().damping(16)} style={styles.eyebrow}>
+                {eyebrow}
+              </Animated.Text>
+              <Animated.Text entering={FadeInDown.delay(160).springify().damping(16)} style={styles.title}>
+                {title}
+              </Animated.Text>
+              <Animated.Text entering={FadeInDown.delay(240).springify().damping(16)} style={styles.body}>
+                {body}
+              </Animated.Text>
             </View>
           ))}
         </ScrollView>
@@ -98,19 +102,19 @@ export default function OnboardingScreen() {
         <View style={styles.footer}>
           <View style={styles.dots}>
             {PAGES.map((_, i) => (
-              <View key={i} style={[styles.dot, i === page && styles.dotActive]} />
+              <Animated.View key={i} layout={Layout.springify()} style={[styles.dot, i === page && styles.dotActive]} />
             ))}
           </View>
-          <View style={styles.btnShadow}>
-            <Btn tone="cyan" onPress={next} style={styles.nextBtn}>
-              {isLast ? 'Get Started' : 'Next'}
-            </Btn>
-          </View>
+          <GlowButton
+            label={isLast ? 'GET STARTED' : 'NEXT'}
+            icon="arrow-forward"
+            onPress={next}
+            style={{ alignSelf: 'stretch' }}
+          />
           {isLast && (
-            <View style={styles.legalRow}>
-              <Ionicons name="shield-checkmark-outline" size={12} color={color.textFaint} />
+            <Animated.View entering={FadeIn.delay(200)} style={styles.legalRow}>
               <Text style={styles.legal}>Clinical research tool — not a medical device.</Text>
-            </View>
+            </Animated.View>
           )}
         </View>
       </SafeAreaView>
@@ -131,49 +135,42 @@ const styles = StyleSheet.create({
     color: color.textFaint,
     padding: space.sm,
   },
-  page: { alignItems: 'center', justifyContent: 'center', paddingHorizontal: space.xl },
-  illustrationGlow: {
-    marginBottom: space.xl,
-    shadowColor: color.cyan,
-    shadowOpacity: 0.45,
-    shadowRadius: 30,
-    shadowOffset: { width: 0, height: 0 },
+  page: { paddingHorizontal: space.xl, paddingTop: space.xxl + space.lg },
+  heroRow: {
+    height: 260,
+    alignItems: 'flex-end',
+    justifyContent: 'center',
+    marginBottom: space.lg,
+    overflow: 'visible',
   },
+  heroBleed: { marginRight: -36 },
   eyebrow: {
     fontFamily: font.monoMed,
-    fontSize: 10,
-    letterSpacing: 2,
+    fontSize: 11,
+    letterSpacing: 2.5,
     color: color.cyan,
     marginBottom: space.sm,
   },
   title: {
     fontFamily: font.bodyXbold,
-    fontSize: 26,
+    fontSize: 28,
     color: color.text,
-    textAlign: 'center',
-    lineHeight: 32,
+    lineHeight: 34,
+    letterSpacing: -0.5,
     marginBottom: space.sm,
+    maxWidth: 300,
   },
   body: {
     fontFamily: font.body,
     fontSize: 14,
     color: color.textDim,
-    textAlign: 'center',
     lineHeight: 21,
-    maxWidth: 300,
+    maxWidth: 290,
   },
-  footer: { paddingHorizontal: space.xl, paddingBottom: space.lg, alignItems: 'center' },
+  footer: { paddingHorizontal: space.xl, paddingBottom: space.lg },
   dots: { flexDirection: 'row', gap: 8, marginBottom: space.lg },
   dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: color.line },
   dotActive: { backgroundColor: color.cyan, width: 20 },
-  btnShadow: {
-    alignSelf: 'stretch',
-    shadowColor: color.cyan,
-    shadowOpacity: 0.35,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: 6 },
-  },
-  nextBtn: { alignSelf: 'stretch' },
-  legalRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: space.md },
+  legalRow: { alignItems: 'center', marginTop: space.md },
   legal: { fontFamily: font.mono, fontSize: 9, color: color.textFaint },
 });

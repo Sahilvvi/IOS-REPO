@@ -37,6 +37,13 @@ export interface Profile {
   * into the app's document directory. Absent = use the bundled default mesh. */
  socket_uri?: string;
  socket_name?: string;
+ /** User-entered, not seeded with placeholder demo data — Care screen shows
+ * an empty state + "Add" prompt until these are actually filled in. */
+ clinician?: { name: string; role: string; phone: string };
+ next_appointment?: { date_label: string; time_label: string };
+ /** Sock plies currently added inside the socket for volume adjustment —
+ * incremented from the Fit screen's "Add Sock Ply" action. */
+ ply_count?: number;
  created_at: number;
 }
 
