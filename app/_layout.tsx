@@ -6,9 +6,9 @@ import * as SplashScreen from 'expo-splash-screen';
 import { useEffect } from 'react';
 import { PressureProvider } from '@/pressure/PressureProvider';
 import { ProfileProvider } from '@/context/ProfileContext';
-import { AuthProvider } from '@/context/AuthContext';
-import { Text, View, StyleSheet } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
+import { AuthProvider, useAuth } from '@/context/AuthContext';
+import { OnboardingProvider, useOnboarding } from '@/context/OnboardingContext';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { color } from '@/theme/tokens';
 
 SplashScreen.preventAutoHideAsync();
@@ -23,20 +23,43 @@ export default function RootLayout() {
  'DM Mono_500Medium': require('@expo-google-fonts/dm-mono').DM_Mono_500Medium,
  });
 
- useEffect(() => {
- if (loaded || error) {
- SplashScreen.hideAsync();
- }
- }, [loaded, error]);
-
  if (!loaded && !error) return null;
 
  return (
  <SafeAreaProvider>
  <StatusBar style="light" />
+ <ErrorBoundary>
  <AuthProvider>
+ <OnboardingProvider>
  <ProfileProvider>
  <PressureProvider>
+ <Gate />
+ </PressureProvider>
+ </ProfileProvider>
+ </OnboardingProvider>
+ </AuthProvider>
+ </ErrorBoundary>
+ </SafeAreaProvider>
+ );
+}
+
+/** Holds the native splash up until we know both (a) whether this is a
+ * first-ever launch (needs onboarding) and (b) whether there's a signed-in
+ * session — then routes to exactly one of onboarding / login / the app via
+ * Stack.Protected, which also handles automatically redirecting when either
+ * flag flips later (onboarding finishes, sign-in/out happens). */
+function Gate() {
+ const { session, loading: authLoading } = useAuth();
+ const { hasOnboarded } = useOnboarding();
+ const ready = !authLoading && hasOnboarded !== null;
+
+ useEffect(() => {
+ if (ready) SplashScreen.hideAsync();
+ }, [ready]);
+
+ if (!ready) return null;
+
+ return (
  <Stack
  screenOptions={{
  headerShown: false,
@@ -44,12 +67,16 @@ export default function RootLayout() {
  animation: 'fade',
  }}
  >
- <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
- <Stack.Screen name="session-detail" options={{ headerShown: false }} />
+ <Stack.Protected guard={!hasOnboarded}>
+ <Stack.Screen name="onboarding" />
+ </Stack.Protected>
+ <Stack.Protected guard={!!hasOnboarded && !session}>
+ <Stack.Screen name="login" />
+ </Stack.Protected>
+ <Stack.Protected guard={!!hasOnboarded && !!session}>
+ <Stack.Screen name="(tabs)" />
+ <Stack.Screen name="session-detail" />
+ </Stack.Protected>
  </Stack>
- </PressureProvider>
- </ProfileProvider>
- </AuthProvider>
- </SafeAreaProvider>
  );
 }

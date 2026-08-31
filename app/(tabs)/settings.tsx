@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, ScrollView, StyleSheet, Alert, TouchableOpacity, TextInput, Modal } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, Alert, TouchableOpacity, Modal } from 'react-native';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
-import * as DocumentPicker from 'expo-document-picker';
 import { ScreenScaffold, Panel, Lbl, Btn, Row, StatTile, PressureGrid } from '@/components';
 import { color, font, space, radius } from '@/theme/tokens';
 import { DEVICE_NAMES, useDevice, useFitReading } from '@/pressure/PressureProvider';
@@ -11,6 +10,16 @@ import { useProfile } from '@/context/ProfileContext';
 import { useAuth } from '@/context/AuthContext';
 import { importSocketFile, clearSocketFile, type Profile } from '@/services/ProfileService';
 import type { MappingMethod } from '@/services/SensorMapper';
+
+// Guarded lazy require — see SocketViewer.native.tsx for why: a native
+// module that fails to link should degrade this one feature, not take down
+// the whole Settings screen (which is eagerly loaded at launch).
+let DocumentPicker: typeof import('expo-document-picker') | null = null;
+try {
+  DocumentPicker = require('expo-document-picker');
+} catch (e) {
+  console.warn('[Settings] expo-document-picker unavailable:', e);
+}
 
 const GRID_OPTIONS = [{ l: '3×6', r: 3, c: 6 }, { l: '2×9', r: 2, c: 9 }];
 const MAPPING_OPTIONS: { label: string; value: MappingMethod }[] = [
@@ -29,11 +38,8 @@ const KALMAN_FIELDS = [
 export default function SettingsScreen() {
  const router = useRouter();
  const { activeProfile, profiles, setActiveProfile, createProfile, updateActiveProfile } = useProfile();
- const { session, configured, signIn, signUp, signOut } = useAuth();
+ const { session, configured, signOut } = useAuth();
  const device = useDevice();
- const [cloudEmail, setCloudEmail] = useState('');
- const [cloudPassword, setCloudPassword] = useState('');
- const [cloudBusy, setCloudBusy] = useState(false);
  const [todayStats, setTodayStats] = useState({ count: 0, totalHours: 0 });
  const [showProfiles, setShowProfiles] = useState(false);
  const [newName, setNewName] = useState('');
@@ -53,27 +59,6 @@ export default function SettingsScreen() {
  const handleBleToggle = () => {
  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
  device.toggleBle();
- };
-
- const handleCloudSignIn = async () => {
- if (!cloudEmail.trim() || !cloudPassword) return;
- setCloudBusy(true);
- const res = await signIn(cloudEmail.trim(), cloudPassword);
- setCloudBusy(false);
- if (res.ok) { setCloudPassword(''); Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); }
- else Alert.alert('Sign in failed', res.error);
- };
-
- const handleCloudSignUp = async () => {
- if (!cloudEmail.trim() || cloudPassword.length < 6) {
- Alert.alert('Cloud Sync', 'Enter an email and a password of at least 6 characters.');
- return;
- }
- setCloudBusy(true);
- const res = await signUp(cloudEmail.trim(), cloudPassword);
- setCloudBusy(false);
- if (res.ok) Alert.alert('Cloud Sync', 'Account created. Check your email to confirm, then sign in.');
- else Alert.alert('Sign up failed', res.error);
  };
 
  const handleCreateProfile = async () => {
@@ -108,6 +93,10 @@ export default function SettingsScreen() {
 
  const handleChooseSocket = async () => {
  if (!activeProfile) return;
+ if (!DocumentPicker) {
+ Alert.alert('Unavailable', 'File import isn\'t available on this build.');
+ return;
+ }
  const result = await DocumentPicker.getDocumentAsync({
  type: ['model/stl', 'model/obj', '*/*'],
  copyToCacheDirectory: true,
@@ -188,9 +177,9 @@ export default function SettingsScreen() {
  )}
  </Section>
 
- {/* Cloud Sync */}
+ {/* Account */}
  <Section>
- <Lbl>Cloud Sync</Lbl>
+ <Lbl>Account</Lbl>
  {!configured ? (
  <Text style={styles.hint}>Not configured — missing Supabase env vars.</Text>
  ) : session ? (
@@ -201,37 +190,7 @@ export default function SettingsScreen() {
  <Btn tone="outline" onPress={() => signOut()}>Sign Out</Btn>
  </>
  ) : (
- <>
- <Text style={styles.hint}>Sign in to sync profiles and sessions across devices.</Text>
- <View style={{ height: space.sm }} />
- <TextInput
- value={cloudEmail}
- onChangeText={setCloudEmail}
- placeholder="Email"
- placeholderTextColor={color.textFaint}
- autoCapitalize="none"
- keyboardType="email-address"
- style={styles.input}
- />
- <View style={{ height: space.sm }} />
- <TextInput
- value={cloudPassword}
- onChangeText={setCloudPassword}
- placeholder="Password"
- placeholderTextColor={color.textFaint}
- secureTextEntry
- style={styles.input}
- />
- <View style={{ height: space.sm }} />
- <Row style={{ gap: space.sm }}>
- <Btn tone="cyan" onPress={handleCloudSignIn} style={{ flex: 1 }}>
- {cloudBusy ? 'Please wait…' : 'Sign In'}
- </Btn>
- <Btn tone="ghost" onPress={handleCloudSignUp} style={{ flex: 1 }}>
- Create Account
- </Btn>
- </Row>
- </>
+ <Text style={styles.hint}>Not signed in.</Text>
  )}
  </Section>
 

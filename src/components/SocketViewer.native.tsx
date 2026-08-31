@@ -4,9 +4,21 @@
 
 import React, { useRef, useMemo, useCallback } from 'react';
 import { View, Text, StyleSheet, Dimensions } from 'react-native';
-import { GLView } from 'expo-gl';
 import { pressureColor } from '@/pressure/ramp';
 import { BASELINE_KPA, SENSOR_COUNT } from '@/pressure/types';
+
+// `expo-gl`'s GLView touches its native module the instant this module is
+// evaluated (requireNativeModule throws synchronously if it isn't linked in
+// this particular build) — and because Expo Router eagerly requires every
+// route on native, that happens at app launch, not when the Fit tab is
+// opened. A guarded lazy require turns a missing/broken native module into a
+// graceful fallback panel instead of an instant, uncatchable app crash.
+let GLView: any = null;
+try {
+  GLView = require('expo-gl').GLView;
+} catch (e) {
+  console.warn('[SocketViewer] expo-gl unavailable — 3D view disabled:', e);
+}
 
 // -------- shader sources --------
 
@@ -276,6 +288,7 @@ export default function SocketViewer({ height = 220, ...props }: any) {
  };
  }, [mesh, frame, maxKpa]);
 
+ if (!GLView) return <View style={[{height},styles.fallback]}><View style={{width:64,height:64,borderRadius:32,borderWidth:2,borderColor:'#22d3ee',justifyContent:'center',alignItems:'center'}}><Text style={{color:'#22d3ee',fontSize:28}}>◇</Text></View><Text style={{color:'#22d3ee',marginTop:10,fontSize:12}}>3D view unavailable on this build</Text></View>;
  if (!mesh) return <View style={[{height},styles.fallback]}><View style={{width:64,height:64,borderRadius:32,borderWidth:2,borderColor:'#22d3ee',justifyContent:'center',alignItems:'center'}}><Text style={{color:'#22d3ee',fontSize:28}}>◇</Text></View><Text style={{color:'#22d3ee',marginTop:10,fontSize:12}}>Socket View</Text></View>;
 
  return <View style={[{aspectRatio:1.4,height},styles.wrap]} onTouchMove={onTouch} onTouchStart={onTouch} onTouchEnd={onTouchEnd} onTouchCancel={onTouchEnd}><GLView style={StyleSheet.absoluteFill} onContextCreate={onGL} /></View>;

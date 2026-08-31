@@ -10,7 +10,6 @@ import {
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Svg, Polyline, Defs, LinearGradient as SvgGradient } from 'react-native-svg';
-import * as Sharing from 'expo-sharing';
 import * as Haptics from 'expo-haptics';
 import { ScreenScaffold, Panel, Lbl, Body, Btn, StatTile } from '@/components/ui';
 import { color, font, space, radius } from '@/theme/tokens';
@@ -26,6 +25,14 @@ import {
  deleteSession,
  exportSession,
 } from '@/services/SessionService';
+
+// Guarded lazy require — see SocketViewer.native.tsx for why.
+let Sharing: typeof import('expo-sharing') | null = null;
+try {
+  Sharing = require('expo-sharing');
+} catch (e) {
+  console.warn('[SessionDetail] expo-sharing unavailable:', e);
+}
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CHART_WIDTH = SCREEN_WIDTH - 2 * space.md - 32; // account for panel padding
@@ -73,8 +80,8 @@ export default function SessionDetailScreen() {
  Alert.alert('Error', 'Could not export session.');
  return;
  }
- const available = await Sharing.isAvailableAsync();
- if (available) {
+ const available = Sharing ? await Sharing.isAvailableAsync() : false;
+ if (available && Sharing) {
  await Sharing.shareAsync(uri);
  } else {
  Alert.alert('Export Ready', 'File saved to cache.');

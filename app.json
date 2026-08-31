@@ -30,11 +30,6 @@
         "android.permission.BLUETOOTH_ADMIN",
         "android.permission.BLUETOOTH_CONNECT",
         "android.permission.BLUETOOTH_SCAN",
-        "android.permission.ACCESS_FINE_LOCATION",
-        "android.permission.BLUETOOTH",
-        "android.permission.BLUETOOTH_ADMIN",
-        "android.permission.BLUETOOTH_CONNECT",
-        "android.permission.BLUETOOTH_SCAN",
         "android.permission.ACCESS_FINE_LOCATION"
       ]
     },
@@ -45,7 +40,16 @@
     "plugins": [
       "expo-router",
       "expo-font",
-      "expo-secure-store"
+      "expo-secure-store",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/icon.png",
+          "imageWidth": 180,
+          "resizeMode": "contain",
+          "backgroundColor": "#070A11"
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true

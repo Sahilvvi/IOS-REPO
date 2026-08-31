@@ -1,11 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity, useWindowDimensions } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, TouchableOpacity, useWindowDimensions, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import * as FileSystem from 'expo-file-system/legacy';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useFitReading, useClinicalReading } from '@/pressure/PressureProvider';
+import { useFitReading, useClinicalReading, useDevice } from '@/pressure/PressureProvider';
 import { useProfile } from '@/context/ProfileContext';
 import { FitRing, PressureGrid, SocketViewer } from '@/components';
 import { Panel, StatTile, Row, Bar, Btn, Lbl, Body, Sub, ScreenScaffold } from '@/components/ui';
@@ -36,6 +36,7 @@ async function loadRawMeshFromUri(uri: string, ext: string): Promise<RawMesh | n
 export default function FitScreen() {
  const reading = useFitReading();
  const clinical = useClinicalReading();
+ const device = useDevice();
  const router = useRouter();
  const { width } = useWindowDimensions();
  const { activeProfile } = useProfile();
@@ -185,7 +186,11 @@ export default function FitScreen() {
  <Btn tone="cyan" onPress={async () => { await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); }}>
  Add Sock Ply
  </Btn>
- <Btn tone="ghost" onPress={async () => { await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); }}>
+ <Btn tone="ghost" onPress={async () => {
+ device.zeroCalibrate();
+ await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+ Alert.alert('Zeroed', 'Current sensor readings captured as the new baseline.');
+ }}>
  Re-zero Fit
  </Btn>
  </Row>

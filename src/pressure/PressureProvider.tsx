@@ -107,18 +107,23 @@ export function PressureProvider({ children }: { children: React.ReactNode }) {
   // ---- Load persisted global device settings once on mount ----
   useEffect(() => {
     (async () => {
-      const [savedKalman, savedBle] = await Promise.all([
-        SecureStore.getItemAsync(KALMAN_KEY),
-        SecureStore.getItemAsync(BLE_KEY),
-      ]);
-      if (savedKalman) {
-        try {
-          const parsed = { ...DEFAULT_KALMAN, ...JSON.parse(savedKalman) };
-          setKalmanState(parsed);
-          applyKalmanTuning(parsed);
-        } catch {}
-      }
-      if (savedBle === 'true') setUseBle(true);
+      // expo-secure-store has no web implementation (throws synchronously
+      // rather than rejecting) — guard so a web preview doesn't take the
+      // whole provider tree down before it renders.
+      try {
+        const [savedKalman, savedBle] = await Promise.all([
+          SecureStore.getItemAsync(KALMAN_KEY),
+          SecureStore.getItemAsync(BLE_KEY),
+        ]);
+        if (savedKalman) {
+          try {
+            const parsed = { ...DEFAULT_KALMAN, ...JSON.parse(savedKalman) };
+            setKalmanState(parsed);
+            applyKalmanTuning(parsed);
+          } catch {}
+        }
+        if (savedBle === 'true') setUseBle(true);
+      } catch {}
     })();
   }, []);
 

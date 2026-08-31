@@ -5,7 +5,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import { useFitReading, useClinicalReading, useSession } from '@/pressure/PressureProvider';
 import { useProfile } from '@/context/ProfileContext';
-import { FitRing } from '@/components';
+import { FitRing, ConnectDeviceCard } from '@/components';
 import { Panel, Row, StatTile, Bar, Btn, Lbl, Body, Sub, ScreenScaffold, Dot } from '@/components/ui';
 import { color, font, space, radius } from '@/theme/tokens';
 import { getTodaySessionStats, listSessions } from '@/services/SessionService';
@@ -88,6 +88,8 @@ export default function TodayScreen() {
  <Text style={styles.greeting}>{greeting}</Text>
  <Text style={styles.greetingSub}>Here is your fit overview</Text>
  </View>
+
+ <ConnectDeviceCard />
 
  <Panel gradient style={styles.fitCard}>
  <View style={styles.fitRow}>
