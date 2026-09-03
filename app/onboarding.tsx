@@ -9,7 +9,7 @@ import { HeroFitRing } from '@/components/HeroFitRing';
 import { HeroTrendChart } from '@/components/HeroTrendChart';
 import { HeroConnectDiagram } from '@/components/HeroConnectDiagram';
 import { useOnboarding } from '@/context/OnboardingContext';
-import { color, font, space } from '@/theme/tokens';
+import { color, font, space, APP_MAX_WIDTH } from '@/theme/tokens';
 
 const PAGES = [
   {
@@ -78,28 +78,35 @@ export default function OnboardingScreen() {
           style={{ flex: 1 }}
         >
           {PAGES.map(({ eyebrow, title, body, Hero }, i) => (
+            // Outer page must stay exactly `width` wide — the paging math in
+            // onScroll()/goTo() snaps to multiples of it. The capped column
+            // lives one level in, so an iPad gets a centered card instead of
+            // the hero graphic and copy pinned to the left of a huge page.
             <View key={i} style={[styles.page, { width }]}>
-              <View style={styles.heroRow}>
-                <CornerRing size={260} progress={0.24 + i * 0.1} />
-                <View style={styles.heroBleed}>
-                  <Hero />
+              <View style={styles.pageContent}>
+                <View style={styles.heroRow}>
+                  <CornerRing size={260} progress={0.24 + i * 0.1} />
+                  <View style={styles.heroBleed}>
+                    <Hero />
+                  </View>
                 </View>
-              </View>
 
-              <Animated.Text entering={FadeInDown.delay(80).springify().damping(16)} style={styles.eyebrow}>
-                {eyebrow}
-              </Animated.Text>
-              <Animated.Text entering={FadeInDown.delay(160).springify().damping(16)} style={styles.title}>
-                {title}
-              </Animated.Text>
-              <Animated.Text entering={FadeInDown.delay(240).springify().damping(16)} style={styles.body}>
-                {body}
-              </Animated.Text>
+                <Animated.Text entering={FadeInDown.delay(80).springify().damping(16)} style={styles.eyebrow}>
+                  {eyebrow}
+                </Animated.Text>
+                <Animated.Text entering={FadeInDown.delay(160).springify().damping(16)} style={styles.title}>
+                  {title}
+                </Animated.Text>
+                <Animated.Text entering={FadeInDown.delay(240).springify().damping(16)} style={styles.body}>
+                  {body}
+                </Animated.Text>
+              </View>
             </View>
           ))}
         </ScrollView>
 
         <View style={styles.footer}>
+          <View style={styles.footerInner}>
           <View style={styles.dots}>
             {PAGES.map((_, i) => (
               <Animated.View key={i} layout={Layout.springify()} style={[styles.dot, i === page && styles.dotActive]} />
@@ -116,6 +123,7 @@ export default function OnboardingScreen() {
               <Text style={styles.legal}>Clinical research tool — not a medical device.</Text>
             </Animated.View>
           )}
+          </View>
         </View>
       </SafeAreaView>
     </View>
@@ -135,7 +143,8 @@ const styles = StyleSheet.create({
     color: color.textFaint,
     padding: space.sm,
   },
-  page: { paddingHorizontal: space.xl, paddingTop: space.xxl + space.lg },
+  page: { paddingHorizontal: space.xl, paddingTop: space.xxl + space.lg, alignItems: 'center' },
+  pageContent: { width: '100%', maxWidth: APP_MAX_WIDTH },
   heroRow: {
     height: 260,
     alignItems: 'flex-end',
@@ -167,7 +176,8 @@ const styles = StyleSheet.create({
     lineHeight: 21,
     maxWidth: 290,
   },
-  footer: { paddingHorizontal: space.xl, paddingBottom: space.lg },
+  footer: { paddingHorizontal: space.xl, paddingBottom: space.lg, alignItems: 'center' },
+  footerInner: { width: '100%', maxWidth: APP_MAX_WIDTH },
   dots: { flexDirection: 'row', gap: 8, marginBottom: space.lg },
   dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: color.line },
   dotActive: { backgroundColor: color.cyan, width: 20 },

@@ -9,242 +9,303 @@
  * Falls back to a simulation source on any BLE failure.
  */
 import { PressureFrame, PressureSource, SENSOR_COUNT } from './types';
+import { SERVICE_UUID, PRESSURE_CHAR_UUID, DEVICE_NAMES } from './deviceConfig';
 
-// BLE identifiers matching the ESP32-S3 firmware
-export const SERVICE_UUID = 'abcd0001-1111-2222-3333-abcdefabcdef';
-export const PRESSURE_CHAR_UUID = 'abcd0002-1111-2222-3333-abcdefabcdef';
-export const IMU_CHAR_UUID = 'abcd0003-1111-2222-3333-abcdefabcdef';
-
-// Device names to scan for (in priority order)
-export const DEVICE_NAMES = [
- 'PROJECT-X-MCU',
- 'PROJECT-X-MCU-LEGACY',
- 'PROJECT-X-18Node',
-];
+export { SERVICE_UUID, PRESSURE_CHAR_UUID, DEVICE_NAMES } from './deviceConfig';
 
 /**
  * Parse the ASCII frame format from the ESP32 firmware:
  * P:12.34,56.78,...|I:0.1,0.2,...|A:WALKING
  */
 function parseCombinedFrame(raw: string): { pressure: number[]; imu?: number[]; activity?: string } | null {
- if (!raw.includes('P:') && !raw.includes('I:') && !raw.includes('A:')) return null;
+  if (!raw.includes('P:') && !raw.includes('I:') && !raw.includes('A:')) return null;
 
- const result: { pressure: number[]; imu?: number[]; activity?: string } = { pressure: [] };
+  const result: { pressure: number[]; imu?: number[]; activity?: string } = { pressure: [] };
 
- for (const rawChunk of raw.split('|')) {
- const chunk = rawChunk.trim();
- if (chunk.startsWith('P:')) {
- const vals = chunk.slice(2).split(',').map(Number).filter(v => !isNaN(v));
- if (vals.length > 0) result.pressure = vals;
- } else if (chunk.startsWith('I:')) {
- const parts = chunk.slice(2).split(',').map(Number).filter(v => !isNaN(v));
- if (parts.length >= 7) result.imu = parts.slice(0, 7);
- } else if (chunk.startsWith('A:')) {
- result.activity = chunk.slice(2).trim() || 'UNKNOWN';
- }
- }
+  for (const rawChunk of raw.split('|')) {
+    const chunk = rawChunk.trim();
+    if (chunk.startsWith('P:')) {
+      const vals = chunk.slice(2).split(',').map(Number).filter(v => !isNaN(v));
+      // A short list means the BLE notification arrived truncated (see the MTU
+      // note in BLE-CONNECTION.md) — reject it rather than rendering a corrupt
+      // half-frame padded with zeros.
+      if (vals.length >= SENSOR_COUNT) result.pressure = vals;
+    } else if (chunk.startsWith('I:')) {
+      const parts = chunk.slice(2).split(',').map(Number).filter(v => !isNaN(v));
+      if (parts.length >= 7) result.imu = parts.slice(0, 7);
+    } else if (chunk.startsWith('A:')) {
+      result.activity = chunk.slice(2).trim() || 'UNKNOWN';
+    }
+  }
 
- return result.pressure.length > 0 ? result : null;
+  return result.pressure.length > 0 ? result : null;
 }
 
 export type BleStatus = 'scanning' | 'connected' | 'fallback';
 
+/** A device seen during a scan that matched one of DEVICE_NAMES. */
+export interface DiscoveredDevice {
+  id: string;
+  name: string;
+}
+
 export class BlePressureSource implements PressureSource {
- readonly id = 'ble';
- private manager: any = null;
- private device: any = null;
- private subId: string | null = null;
- private alive = true;
- private scanTimer: ReturnType<typeof setTimeout> | null = null;
- private status: BleStatus = 'scanning';
- private statusListeners = new Set<(s: BleStatus) => void>();
+  readonly id = 'ble';
+  private manager: any = null;
+  private device: any = null;
+  private subId: string | null = null;
+  private alive = true;
+  private scanTimer: ReturnType<typeof setTimeout> | null = null;
+  private status: BleStatus = 'scanning';
+  private statusListeners = new Set<(s: BleStatus) => void>();
+  private error: string | null = null;
+  private errorListeners = new Set<(msg: string | null) => void>();
+  private discovered = new Map<string, DiscoveredDevice>();
+  private deviceListListeners = new Set<(devices: DiscoveredDevice[]) => void>();
 
- constructor(private readonly fallback: PressureSource) {}
+  constructor(private readonly fallback: PressureSource) {}
 
- onStatusChange(cb: (s: BleStatus) => void): () => void {
- this.statusListeners.add(cb);
- cb(this.status);
- return () => this.statusListeners.delete(cb);
- }
+  onStatusChange(cb: (s: BleStatus) => void): () => void {
+    this.statusListeners.add(cb);
+    cb(this.status);
+    return () => this.statusListeners.delete(cb);
+  }
 
- private setStatus(s: BleStatus) {
- this.status = s;
- for (const cb of this.statusListeners) cb(s);
- }
+  /** A human-readable reason for the current 'fallback' status, or null when
+   * not applicable — distinguishes "Bluetooth is off" from "no device found"
+   * from "connected then dropped", which previously all collapsed into the
+   * same undiagnostic 'fallback' state with no way to tell them apart. */
+  onError(cb: (msg: string | null) => void): () => void {
+    this.errorListeners.add(cb);
+    cb(this.error);
+    return () => this.errorListeners.delete(cb);
+  }
 
- subscribe(onFrame: (frame: PressureFrame) => void): () => void {
- this.setStatus('scanning');
- this.connect(onFrame).catch(() => {
- if (this.alive) {
- this.setStatus('fallback');
- this.fallback.subscribe(onFrame);
- }
- });
+  /** Every device matching DEVICE_NAMES seen so far during the current scan —
+   * for visibility into what's actually nearby, even though the connect flow
+   * below still auto-connects to the first match (unverified against real
+   * hardware timing to change without a physical device to test against). */
+  onDeviceList(cb: (devices: DiscoveredDevice[]) => void): () => void {
+    this.deviceListListeners.add(cb);
+    cb([...this.discovered.values()]);
+    return () => this.deviceListListeners.delete(cb);
+  }
 
- return () => {
- this.alive = false;
- this.teardown();
- };
- }
+  private setStatus(s: BleStatus) {
+    this.status = s;
+    for (const cb of this.statusListeners) cb(s);
+  }
 
- private async connect(onFrame: (frame: PressureFrame) => void): Promise<void> {
- try {
- const btReady = await this.waitForBluetooth();
- if (!this.alive) return;
- if (!btReady) {
- this.setStatus('fallback');
- this.fallback.subscribe(onFrame);
- return;
- }
+  private setError(msg: string | null) {
+    this.error = msg;
+    for (const cb of this.errorListeners) cb(msg);
+  }
 
- this.device = await this.findDevice();
- if (!this.device || !this.alive) {
- if (this.alive) { this.setStatus('fallback'); this.fallback.subscribe(onFrame); }
- return;
- }
+  private noteDiscovered(device: DiscoveredDevice) {
+    if (this.discovered.has(device.id)) return;
+    this.discovered.set(device.id, device);
+    const list = [...this.discovered.values()];
+    for (const cb of this.deviceListListeners) cb(list);
+  }
 
- await this.device.connect();
- const services = await this.device.discoverAllServicesAndCharacteristics();
+  subscribe(onFrame: (frame: PressureFrame) => void): () => void {
+    this.setStatus('scanning');
+    this.setError(null);
+    this.discovered.clear();
+    this.connect(onFrame).catch(() => {
+      if (this.alive) {
+        this.setStatus('fallback');
+        this.setError('Connection failed unexpectedly — using simulated data.');
+        this.fallback.subscribe(onFrame);
+      }
+    });
 
- let pressureChar: any = undefined;
- for (const svc of services) {
- if (svc.uuid.toLowerCase() === SERVICE_UUID.toLowerCase()) {
- const chars = await this.device.characteristicsForService(svc.uuid);
- pressureChar = chars.find((c: any) => c.uuid.toLowerCase() === PRESSURE_CHAR_UUID.toLowerCase());
- break;
- }
- }
+    return () => {
+      this.alive = false;
+      this.teardown();
+    };
+  }
 
- if (!pressureChar) {
- await this.device.cancelConnection();
- if (this.alive) { this.setStatus('fallback'); this.fallback.subscribe(onFrame); }
- return;
- }
+  private async connect(onFrame: (frame: PressureFrame) => void): Promise<void> {
+    try {
+      const btReady = await this.waitForBluetooth();
+      if (!this.alive) return;
+      if (!btReady) {
+        this.setStatus('fallback');
+        this.setError('Bluetooth is off, unsupported, or permission was denied — using simulated data.');
+        this.fallback.subscribe(onFrame);
+        return;
+      }
 
- try { await this.device.requestMTU(512); } catch {}
+      this.device = await this.findDevice();
+      if (!this.device || !this.alive) {
+        if (this.alive) {
+          this.setStatus('fallback');
+          this.setError(`No device matching "${DEVICE_NAMES.join('", "')}" found nearby — make sure it's powered on and in range, then reconnect.`);
+          this.fallback.subscribe(onFrame);
+        }
+        return;
+      }
 
- this.subId = await this.device.monitorCharacteristicForService(
- SERVICE_UUID,
- PRESSURE_CHAR_UUID,
- (_err: any, characteristic: any) => {
- if (_err || !characteristic?.value || !this.alive) return;
- try {
- const base64 = characteristic.value;
- const text = this.base64ToString(base64);
- const parsed = parseCombinedFrame(text);
- if (parsed && parsed.pressure.length > 0) {
- const trimmed = parsed.pressure.slice(0, SENSOR_COUNT);
- while (trimmed.length < SENSOR_COUNT) trimmed.push(0);
- onFrame(trimmed);
- }
- } catch {
- // ignore corrupt frames
- }
- },
- );
+      await this.device.connect();
+      const services = await this.device.discoverAllServicesAndCharacteristics();
 
- this.setStatus('connected');
+      let pressureChar: any = undefined;
+      for (const svc of services) {
+        if (svc.uuid.toLowerCase() === SERVICE_UUID.toLowerCase()) {
+          const chars = await this.device.characteristicsForService(svc.uuid);
+          pressureChar = chars.find((c: any) => c.uuid.toLowerCase() === PRESSURE_CHAR_UUID.toLowerCase());
+          break;
+        }
+      }
 
- this.device.onDisconnected(() => {
- if (this.alive) {
- this.setStatus('scanning');
- this.connect(onFrame).catch(() => {
- if (this.alive) { this.setStatus('fallback'); this.fallback.subscribe(onFrame); }
- });
- }
- });
- } catch {
- if (this.alive) { this.setStatus('fallback'); this.fallback.subscribe(onFrame); }
- }
- }
+      if (!pressureChar) {
+        await this.device.cancelConnection();
+        if (this.alive) {
+          this.setStatus('fallback');
+          this.setError('Device found but does not expose the expected pressure service — check firmware version.');
+          this.fallback.subscribe(onFrame);
+        }
+        return;
+      }
 
- private base64ToString(b64: string): string {
- try {
- const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
- const clean = b64.replace(/=+$/, '');
- let binary = '';
- for (let i = 0; i < clean.length; i += 4) {
- const a = chars.indexOf(clean[i]);
- const b = chars.indexOf(clean[i + 1]);
- const c = chars.indexOf(clean[i + 2]);
- const d = chars.indexOf(clean[i + 3]);
- const triple = (a << 18) + (b << 12) + ((c || 0) << 6) + (d || 0);
- binary += String.fromCharCode((triple >> 16) & 255, (triple >> 8) & 255, triple & 255);
- }
- // The ESP32 sends UTF-8 ASCII text
- return decodeURIComponent(escape(binary));
- } catch {
- return b64;
- }
- }
+      try { await this.device.requestMTU(512); } catch {}
 
- private async waitForBluetooth(): Promise<boolean> {
- return new Promise((resolve) => {
- const BleManager = require('react-native-ble-plx').BleManager;
- this.manager = new BleManager();
+      this.subId = await this.device.monitorCharacteristicForService(
+        SERVICE_UUID,
+        PRESSURE_CHAR_UUID,
+        (_err: any, characteristic: any) => {
+          if (_err || !characteristic?.value || !this.alive) return;
+          try {
+            const base64 = characteristic.value;
+            const text = this.base64ToString(base64);
+            const parsed = parseCombinedFrame(text);
+            if (parsed && parsed.pressure.length > 0) {
+              const trimmed = parsed.pressure.slice(0, SENSOR_COUNT);
+              while (trimmed.length < SENSOR_COUNT) trimmed.push(0);
+              onFrame(trimmed);
+            }
+          } catch {
+            // ignore corrupt frames
+          }
+        },
+      );
 
- const check = async () => {
- try {
- const state = await this.manager.state();
- if (state === 'PoweredOn') { resolve(true); return; }
- if (state === 'Unsupported' || state === 'PoweredOff') { resolve(false); return; }
- } catch { resolve(false); return; }
- };
+      this.setStatus('connected');
+      this.setError(null);
 
- check();
+      this.device.onDisconnected(() => {
+        if (this.alive) {
+          this.setStatus('scanning');
+          this.setError('Device disconnected — reconnecting…');
+          this.connect(onFrame).catch(() => {
+            if (this.alive) {
+              this.setStatus('fallback');
+              this.setError('Device disconnected and could not reconnect — using simulated data.');
+              this.fallback.subscribe(onFrame);
+            }
+          });
+        }
+      });
+    } catch (err) {
+      if (this.alive) {
+        this.setStatus('fallback');
+        this.setError(`Connection error: ${err instanceof Error ? err.message : String(err)}`);
+        this.fallback.subscribe(onFrame);
+      }
+    }
+  }
 
- const timeout = setTimeout(() => {
- this.manager?.stopDeviceScan();
- resolve(false);
- }, 8000);
+  private base64ToString(b64: string): string {
+    try {
+      const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+      const clean = b64.replace(/=+$/, '');
+      let binary = '';
+      for (let i = 0; i < clean.length; i += 4) {
+        const a = chars.indexOf(clean[i]);
+        const b = chars.indexOf(clean[i + 1]);
+        const c = chars.indexOf(clean[i + 2]);
+        const d = chars.indexOf(clean[i + 3]);
+        const triple = (a << 18) + (b << 12) + ((c || 0) << 6) + (d || 0);
+        binary += String.fromCharCode((triple >> 16) & 255, (triple >> 8) & 255, triple & 255);
+      }
+      // The ESP32 sends UTF-8 ASCII text
+      return decodeURIComponent(escape(binary));
+    } catch {
+      return b64;
+    }
+  }
 
- this.manager.onStateChange((newState: string) => {
- if (newState === 'PoweredOn') { clearTimeout(timeout); resolve(true); }
- else if (newState === 'Unsupported' || newState === 'PoweredOff') { clearTimeout(timeout); resolve(false); }
- }, true);
- });
- }
+  private async waitForBluetooth(): Promise<boolean> {
+    return new Promise((resolve) => {
+      const BleManager = require('react-native-ble-plx').BleManager;
+      this.manager = new BleManager();
 
- private async findDevice(): Promise<any> {
- const { BleManager } = require('react-native-ble-plx');
- const manager = this.manager || new BleManager();
+      const check = async () => {
+        try {
+          const state = await this.manager.state();
+          if (state === 'PoweredOn') { resolve(true); return; }
+          if (state === 'Unsupported' || state === 'PoweredOff') { resolve(false); return; }
+        } catch { resolve(false); return; }
+      };
 
- for (let attempt = 0; attempt < 3; attempt++) {
- const device = await this.scan(manager);
- if (device) return device;
- }
- return null;
- }
+      check();
 
- private scan(manager: any): Promise<any> {
- return new Promise((resolve) => {
- let found: any = null;
+      const timeout = setTimeout(() => {
+        this.manager?.stopDeviceScan();
+        resolve(false);
+      }, 8000);
 
- manager.startDeviceScan(null, null, (error: any, device: any) => {
- if (error || !device) return;
- const name = (device.name ?? device.localName ?? '').toLowerCase();
- if (DEVICE_NAMES.some(dn => name.includes(dn.toLowerCase()))) {
- found = device;
- manager.stopDeviceScan();
- resolve(found);
- }
- });
+      this.manager.onStateChange((newState: string) => {
+        if (newState === 'PoweredOn') { clearTimeout(timeout); resolve(true); }
+        else if (newState === 'Unsupported' || newState === 'PoweredOff') { clearTimeout(timeout); resolve(false); }
+      }, true);
+    });
+  }
 
- this.scanTimer = setTimeout(() => {
- manager.stopDeviceScan();
- resolve(null);
- }, 8000);
- });
- }
+  private async findDevice(): Promise<any> {
+    const { BleManager } = require('react-native-ble-plx');
+    const manager = this.manager || new BleManager();
 
- private teardown() {
- if (this.scanTimer) clearTimeout(this.scanTimer);
- if (this.subId && this.device) {
- this.device.cancelConnection().catch(() => {});
- }
- this.manager?.destroy();
- this.manager = null;
- this.device = null;
- this.subId = null;
- }
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const device = await this.scan(manager);
+      if (device) return device;
+    }
+    return null;
+  }
+
+  private scan(manager: any): Promise<any> {
+    return new Promise((resolve) => {
+      let found: any = null;
+
+      manager.startDeviceScan(null, null, (error: any, device: any) => {
+        if (error || !device) return;
+        const name = (device.name ?? device.localName ?? '').toLowerCase();
+        if (DEVICE_NAMES.some(dn => name.includes(dn.toLowerCase()))) {
+          this.noteDiscovered({ id: device.id, name: device.name ?? device.localName ?? 'Unknown device' });
+          if (!found) {
+            found = device;
+            manager.stopDeviceScan();
+            resolve(found);
+          }
+        }
+      });
+
+      this.scanTimer = setTimeout(() => {
+        manager.stopDeviceScan();
+        resolve(null);
+      }, 8000);
+    });
+  }
+
+  private teardown() {
+    if (this.scanTimer) clearTimeout(this.scanTimer);
+    if (this.subId && this.device) {
+      this.device.cancelConnection().catch(() => {});
+    }
+    this.manager?.destroy();
+    this.manager = null;
+    this.device = null;
+    this.subId = null;
+  }
 }

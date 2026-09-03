@@ -4,7 +4,8 @@ import * as SecureStore from 'expo-secure-store';
 import { derive, deriveClinical, FitReading, resetDerive, setKalmanTuning as applyKalmanTuning } from './derive';
 import { SimulatedPressureSource } from './SimulatedPressureSource';
 import { PressureFrame, PressureSource, SENSOR_COUNT, BASELINE_KPA } from './types';
-import { BlePressureSource, DEVICE_NAMES, BleStatus } from './BlePressureSource';
+import { BlePressureSource, DEVICE_NAMES, BleStatus, DiscoveredDevice } from './BlePressureSource';
+import { HttpPressureSource, BridgeStatus } from './HttpPressureSource';
 import { KalmanTuning } from './kalmanFilter';
 import { useProfile } from '@/context/ProfileContext';
 import * as sessionLogger from './sessionLogger';
@@ -49,6 +50,18 @@ export interface DeviceApi {
   useBle: boolean;
   bleStatus: BleStatus | 'idle';
   toggleBle: () => void;
+  /** Human-readable reason for a 'fallback' bleStatus (Bluetooth off, no
+   * device found, connection dropped, etc) — null when not in fallback. */
+  bleError: string | null;
+  /** Devices matching DEVICE_NAMES seen during the current/last BLE scan. */
+  bleDevices: DiscoveredDevice[];
+  /** The Python-bridge HTTP source (adapt/backend/App.py) — an alternative
+   * to native BLE that works in the simulator and over plain HTTP, useful
+   * both as a real fallback path and for testing without paired hardware. */
+  useBridge: boolean;
+  bridgeStatus: BridgeStatus | null;
+  connectBridge: () => void;
+  disconnectBridge: () => void;
   /** Zero/tare, scoped to the active profile (mirrors desktop's per-profile
    * calibration.zero_offsets) — a one-time baseline capture, not continuous
    * auto-zero, so a real load applied afterward is never masked. */
@@ -82,9 +95,21 @@ export function PressureProvider({ children }: { children: React.ReactNode }) {
 
   const [useBle, setUseBle] = useState(false);
   const [bleStatus, setBleStatus] = useState<BleStatus | 'idle'>('idle');
+  const [bleError, setBleError] = useState<string | null>(null);
+  const [bleDevices, setBleDevices] = useState<DiscoveredDevice[]>([]);
+  const [useBridge, setUseBridge] = useState(false);
+  const [bridgeStatus, setBridgeStatus] = useState<BridgeStatus | null>(null);
   const simSource = useMemo(() => new SimulatedPressureSource(460), []);
   const bleSource = useMemo(() => new BlePressureSource(simSource), [simSource]);
-  const active = useMemo(() => (useBle ? bleSource : simSource), [useBle, simSource, bleSource]);
+  const httpSource = useMemo(() => new HttpPressureSource(), []);
+  // Bridge takes priority over BLE if somehow both are on — connectBridge()/
+  // toggleBle() keep them mutually exclusive in the UI, but picking one
+  // deterministic order here means a stray simultaneous flip can't leave two
+  // sources racing to feed `active`.
+  const active = useMemo(
+    () => (useBridge ? httpSource : useBle ? bleSource : simSource),
+    [useBridge, useBle, simSource, bleSource, httpSource],
+  );
 
   const [frame, setFrame] = useState<PressureFrame>(() => [...BASELINE_KPA]);
   const [clinical, setClinical] = useState<ClinicalReading>(NO_CLINICAL_DATA);
@@ -167,14 +192,24 @@ export function PressureProvider({ children }: { children: React.ReactNode }) {
 
   // ---- BLE connection status ----
   useEffect(() => {
-    if (!useBle) { setBleStatus('idle'); return; }
-    return bleSource.onStatusChange(setBleStatus);
+    if (!useBle) { setBleStatus('idle'); setBleError(null); setBleDevices([]); return; }
+    const offStatus = bleSource.onStatusChange(setBleStatus);
+    const offError = bleSource.onError(setBleError);
+    const offDevices = bleSource.onDeviceList(setBleDevices);
+    return () => { offStatus(); offError(); offDevices(); };
   }, [useBle, bleSource]);
+
+  // ---- Bridge connection status ----
+  useEffect(() => {
+    if (!useBridge) { setBridgeStatus(null); return; }
+    return httpSource.onStatus(setBridgeStatus);
+  }, [useBridge, httpSource]);
 
   const toggleBle = useCallback(() => {
     setUseBle((prev) => {
       const next = !prev;
       if (next) {
+        setUseBridge(false);
         resetDerive();
         setFrame([...BASELINE_KPA]);
         setClinical(NO_CLINICAL_DATA);
@@ -182,6 +217,18 @@ export function PressureProvider({ children }: { children: React.ReactNode }) {
       saveJson(BLE_KEY, String(next));
       return next;
     });
+  }, []);
+
+  const connectBridge = useCallback(() => {
+    setUseBle(false);
+    setUseBridge(true);
+    resetDerive();
+    setFrame([...BASELINE_KPA]);
+    setClinical(NO_CLINICAL_DATA);
+  }, []);
+
+  const disconnectBridge = useCallback(() => {
+    setUseBridge(false);
   }, []);
 
   const zeroCalibrate = useCallback(() => {
@@ -231,11 +278,14 @@ export function PressureProvider({ children }: { children: React.ReactNode }) {
 
   const deviceApi = useMemo<DeviceApi>(
     () => ({
-      useBle, bleStatus, toggleBle,
+      useBle, bleStatus, toggleBle, bleError, bleDevices,
+      useBridge, bridgeStatus, connectBridge, disconnectBridge,
       hasZeroCalibration, zeroCalibrate, clearZeroCalibration,
       kalman, setKalman, resetKalman,
     }),
-    [useBle, bleStatus, toggleBle, hasZeroCalibration, zeroCalibrate, clearZeroCalibration,
+    [useBle, bleStatus, toggleBle, bleError, bleDevices,
+      useBridge, bridgeStatus, connectBridge, disconnectBridge,
+      hasZeroCalibration, zeroCalibrate, clearZeroCalibration,
       kalman, setKalman, resetKalman],
   );
 

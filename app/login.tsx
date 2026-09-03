@@ -16,7 +16,7 @@ import * as Haptics from 'expo-haptics';
 import { GlowButton } from '@/components/GlowButton';
 import { SensorGridTexture, CornerRing } from '@/components/InstrumentBackdrop';
 import { useAuth } from '@/context/AuthContext';
-import { color, font, space } from '@/theme/tokens';
+import { color, font, space, APP_MAX_WIDTH } from '@/theme/tokens';
 
 type Mode = 'signin' | 'signup';
 
@@ -105,6 +105,11 @@ export default function LoginScreen() {
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
           >
+            {/* Capped and centered so the form reads as a form on an iPad's
+                much wider screen, instead of text inputs and buttons
+                stretching edge-to-edge — same treatment ScreenScaffold gives
+                every post-auth screen. */}
+            <View style={styles.formWrap}>
             <View style={styles.heroRow}>
               <CornerRing size={260} progress={mode === 'signin' ? 0.22 : 0.42} />
             </View>
@@ -158,6 +163,7 @@ export default function LoginScreen() {
                 </Animated.View>
               )}
             </View>
+            </View>
           </ScrollView>
 
           <Text style={styles.disclaimer}>
@@ -196,7 +202,8 @@ function Field({
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: color.bg },
   safe: { flex: 1 },
-  scroll: { flexGrow: 1, padding: space.xl, paddingTop: space.xxl + space.lg },
+  scroll: { flexGrow: 1, padding: space.xl, paddingTop: space.xxl + space.lg, alignItems: 'center' },
+  formWrap: { width: '100%', maxWidth: APP_MAX_WIDTH },
   heroRow: { height: 0 },
   eyebrow: { fontFamily: font.monoMed, fontSize: 11, letterSpacing: 2.5, color: color.textFaint, marginBottom: space.lg },
   title: { fontFamily: font.bodyXbold, fontSize: 34, lineHeight: 38, color: color.text, letterSpacing: -0.5, maxWidth: 270 },

@@ -11,9 +11,9 @@ import { useAuth } from '@/context/AuthContext';
 import { importSocketFile, clearSocketFile, type Profile } from '@/services/ProfileService';
 import type { MappingMethod } from '@/services/SensorMapper';
 
-// Guarded lazy require — see SocketViewer.native.tsx for why: a native
-// module that fails to link should degrade this one feature, not take down
-// the whole Settings screen (which is eagerly loaded at launch).
+// Guarded lazy require — a native module that fails to link should degrade
+// this one feature, not take down the whole Settings screen (which is
+// eagerly loaded at launch).
 let DocumentPicker: typeof import('expo-document-picker') | null = null;
 try {
   DocumentPicker = require('expo-document-picker');

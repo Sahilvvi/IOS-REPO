@@ -1,70 +1,56 @@
-export const mat4 = {
- create(): Float32Array {
- return new Float32Array([1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1]);
- },
+/** Just enough matrix maths for one orbiting camera. Column-major, WebGL order. */
 
- perspective(fov: number, aspect: number, near: number, far: number): Float32Array {
- const f = 1.0 / Math.tan(fov / 2);
- const nf = 1 / (near - far);
- const out = new Float32Array(16);
- out[0] = f / aspect;
- out[5] = f;
- out[10] = (far + near) * nf;
- out[11] = -1;
- out[14] = 2 * far * near * nf;
- return out;
- },
+export type Mat4 = Float32Array;
+export type Mat3 = Float32Array;
 
- lookAt(eye: number[], center: number[], up: number[]): Float32Array {
- const zx = eye[0]-center[0], zy = eye[1]-center[1], zz = eye[2]-center[2];
- let len = 1/Math.sqrt(zx*zx+zy*zy+zz*zz);
- const z0=zx*len, z1=zy*len, z2=zz*len;
- const xx=up[1]*z2-up[2]*z1, xy=up[2]*z0-up[0]*z2, xz=up[0]*z1-up[1]*z0;
- len=1/Math.sqrt(xx*xx+xy*xy+xz*xz);
- const y0=z1*xz-z2*xy, y1=z2*xx-z0*xz, y2=z0*xy-z1*xx;
- const out = new Float32Array(16);
- out[0]=xx*len; out[1]=y0; out[2]=z0; out[3]=0;
- out[4]=xy*len; out[5]=y1; out[6]=z1; out[7]=0;
- out[8]=xz*len; out[9]=y2; out[10]=z2; out[11]=0;
- out[12]=-(xx*len*eye[0]+xy*len*eye[1]+xz*len*eye[2]);
- out[13]=-(y0*eye[0]+y1*eye[1]+y2*eye[2]);
- out[14]=-(z0*eye[0]+z1*eye[1]+z2*eye[2]);
- out[15]=1;
- return out;
- },
+export function perspective(fovYDeg: number, aspect: number, near: number, far: number): Mat4 {
+  const f = 1 / Math.tan((fovYDeg * Math.PI) / 360);
+  const nf = 1 / (near - far);
+  return new Float32Array([
+    f / aspect, 0, 0, 0,
+    0, f, 0, 0,
+    0, 0, (far + near) * nf, -1,
+    0, 0, 2 * far * near * nf, 0,
+  ]);
+}
 
- multiply(a: Float32Array, b: Float32Array): Float32Array {
- const out = new Float32Array(16);
- for (let i = 0; i < 4; i++)
- for (let j = 0; j < 4; j++) {
- out[j*4+i] = a[i]*b[j*4]+a[4+i]*b[j*4+1]+a[8+i]*b[j*4+2]+a[12+i]*b[j*4+3];
- }
- return out;
- },
+export function lookAt(eye: number[], center: number[], up: number[]): Mat4 {
+  const z = normalize(sub(eye, center));
+  const x = normalize(cross(up, z));
+  const y = cross(z, x);
+  return new Float32Array([
+    x[0], y[0], z[0], 0,
+    x[1], y[1], z[1], 0,
+    x[2], y[2], z[2], 0,
+    -dot(x, eye), -dot(y, eye), -dot(z, eye), 1,
+  ]);
+}
 
- translate(tx: number, ty: number, tz: number): Float32Array {
- const out = mat4.create();
- out[12]=tx; out[13]=ty; out[14]=tz;
- return out;
- },
+export function multiply(a: Mat4, b: Mat4): Mat4 {
+  const out = new Float32Array(16);
+  for (let c = 0; c < 4; c++) {
+    for (let r = 0; r < 4; r++) {
+      let s = 0;
+      for (let k = 0; k < 4; k++) s += a[k * 4 + r] * b[c * 4 + k];
+      out[c * 4 + r] = s;
+    }
+  }
+  return out;
+}
 
- rotateX(angle: number): Float32Array {
- const c=Math.cos(angle), s=Math.sin(angle);
- const out = mat4.create();
- out[5]=c; out[6]=s; out[9]=-s; out[10]=c;
- return out;
- },
+/** Upper-left 3x3 — the view matrix is orthonormal, so this is its normal matrix. */
+export function mat3From(m: Mat4): Mat3 {
+  return new Float32Array([m[0], m[1], m[2], m[4], m[5], m[6], m[8], m[9], m[10]]);
+}
 
- rotateY(angle: number): Float32Array {
- const c=Math.cos(angle), s=Math.sin(angle);
- const out = mat4.create();
- out[0]=c; out[2]=-s; out[8]=s; out[10]=c;
- return out;
- },
-
- scale(sx: number, sy: number, sz: number): Float32Array {
- const out = mat4.create();
- out[0]=sx; out[5]=sy; out[10]=sz;
- return out;
- },
-};
+export const sub = (a: number[], b: number[]) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+export const dot = (a: number[], b: number[]) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+export const cross = (a: number[], b: number[]) => [
+  a[1] * b[2] - a[2] * b[1],
+  a[2] * b[0] - a[0] * b[2],
+  a[0] * b[1] - a[1] * b[0],
+];
+export function normalize(v: number[]): number[] {
+  const l = Math.hypot(v[0], v[1], v[2]) || 1;
+  return [v[0] / l, v[1] / l, v[2] / l];
+}

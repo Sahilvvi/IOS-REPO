@@ -12,8 +12,7 @@ import { Panel, StatTile, Row, Bar, Btn, Lbl, Body, Sub, ScreenScaffold } from '
 import { color, font, space, radius } from '@/theme/tokens';
 import { SENSOR_COUNT, REGIONS, SIDES } from '@/pressure/types';
 import { SOCKET_MESH_B64 } from '@/data/socketMesh';
-import { decodePackedMesh, base64ToBytes } from '@/gl/mesh';
-import { parseSTL, parseOBJ, type RawMesh, type PreparedMesh } from '@/services/StlParser';
+import { decodePackedMesh, base64ToBytes, parseSTL, parseOBJ, type RawMesh, type PreparedMesh } from '@/gl/mesh';
 import { buildPreparedMesh } from '@/services/MeshBuilder';
 import type { MappingMethod } from '@/services/SensorMapper';
 
@@ -103,7 +102,8 @@ export default function FitScreen() {
  <SocketViewer
  mesh={mesh}
  frame={reading.frame}
- maxKpa={reading.level === 'ease-off' ? 100 : 50}
+ hotIndex={reading.hotIndex}
+ showSensors
  height={240}
  />
  <View style={styles.viewerHint}>

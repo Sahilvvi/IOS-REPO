@@ -1,7 +1,8 @@
 import React from 'react';
 import { View, Text, StyleSheet, ViewStyle, StyleProp, Pressable } from 'react-native';
+import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
-import { color, font, space, radius } from '@/theme/tokens';
+import { color, font, space, radius, shadow } from '@/theme/tokens';
 
 // Re-exported here because every screen imports it alongside the rest of the
 // UI kit from '@/components/ui' — ScreenScaffold lives in its own file, but
@@ -92,18 +93,24 @@ export function Btn({
  // isn't reliable even on real touch devices without responder negotiation
  // (a ScrollView ancestor can claim the gesture first). Pressable is the
  // real cross-platform primitive for this.
+ const scale = useSharedValue(1);
+ const animStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
+
  return (
  <Pressable
  onPress={onPress}
- style={({ pressed }) => [styles.btnWrap, style, pressed && styles.btnPressed]}
+ onPressIn={() => { scale.value = withSpring(0.96, { damping: 14, stiffness: 300 }); }}
+ onPressOut={() => { scale.value = withSpring(1, { damping: 14, stiffness: 300 }); }}
+ style={[styles.btnWrap, tone === 'cyan' && shadow.glow, style]}
  >
- <View
+ <Animated.View
  style={[
  styles.btn,
  tone === 'cyan' && styles.btnCyan,
  tone === 'amber' && styles.btnAmber,
  tone === 'ghost' && styles.btnGhost,
  tone === 'outline' && styles.btnOutline,
+ animStyle,
  ]}
  >
  <Text
@@ -117,7 +124,7 @@ export function Btn({
  >
  {typeof children === 'string' ? children.toUpperCase() : children}
  </Text>
- </View>
+ </Animated.View>
  </Pressable>
  );
 }
@@ -142,6 +149,7 @@ const styles = StyleSheet.create({
  borderWidth: 1,
  borderColor: color.line,
  borderRadius: radius.md,
+ ...shadow.sm,
  },
  row: { flexDirection: 'row' },
  track: {
@@ -190,14 +198,19 @@ const styles = StyleSheet.create({
  fontSize: 18,
  color: color.text,
  },
- btnWrap: { borderRadius: radius.md, overflow: 'hidden' },
- btnPressed: { opacity: 0.7 },
+ // No overflow:'hidden' here (unlike the old single-layer version) — RN
+ // clips shadow* rendering to a view's own bounds when overflow is hidden
+ // on that same view, which would silently kill btnCyan's glow shadow
+ // below. `btn` (the inner layer) still carries its own matching
+ // borderRadius + background, so corners stay clean either way.
+ btnWrap: { borderRadius: radius.md },
  btn: {
  paddingVertical: 12,
  paddingHorizontal: 20,
  borderRadius: radius.md,
  alignItems: 'center',
  justifyContent: 'center',
+ overflow: 'hidden',
  },
  btnCyan: { backgroundColor: color.cyan },
  btnAmber: { backgroundColor: color.amber },
@@ -220,6 +233,7 @@ const styles = StyleSheet.create({
  borderRadius: radius.md,
  padding: space.md,
  flex: 1,
+ ...shadow.sm,
  },
  tileLabel: {
  fontFamily: font.mono,

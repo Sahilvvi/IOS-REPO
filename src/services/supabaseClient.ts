@@ -9,8 +9,17 @@ import 'react-native-url-polyfill/auto';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
-const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '';
+// Fallback values for EXPO_PUBLIC_* env vars. These are only ever reached if
+// the build pipeline didn't inline the env vars at bundle time (e.g. an EAS
+// build archived only git-tracked files while `.env` stayed gitignored, as
+// happened for the first TestFlight build — login silently ran in
+// "not configured" mode with no env-var mismatch visible anywhere). Safe to
+// hardcode: this is the anon/publishable key, not a secret (see file header).
+const FALLBACK_SUPABASE_URL = 'https://pzwsehbrstvjkqpxwyod.supabase.co';
+const FALLBACK_SUPABASE_ANON_KEY = 'sb_publishable_Rwcryruz2Dnmfb8X320n7w_EZuyBTPx';
+
+const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL ?? FALLBACK_SUPABASE_URL;
+const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? FALLBACK_SUPABASE_ANON_KEY;
 
 export const isSupabaseConfigured = Boolean(supabaseUrl && supabaseAnonKey);
 

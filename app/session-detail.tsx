@@ -6,13 +6,13 @@ import {
  StyleSheet,
  Alert,
  ActivityIndicator,
- Dimensions,
+ useWindowDimensions,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Svg, Polyline, Defs, LinearGradient as SvgGradient } from 'react-native-svg';
 import * as Haptics from 'expo-haptics';
 import { ScreenScaffold, Panel, Lbl, Body, Btn, StatTile } from '@/components/ui';
-import { color, font, space, radius } from '@/theme/tokens';
+import { color, font, space, radius, APP_MAX_WIDTH } from '@/theme/tokens';
 import {
  SessionMeta,
  listSessions,
@@ -26,7 +26,8 @@ import {
  exportSession,
 } from '@/services/SessionService';
 
-// Guarded lazy require — see SocketViewer.native.tsx for why.
+// Guarded lazy require — a native module that fails to link should degrade
+// this one feature, not crash the whole screen.
 let Sharing: typeof import('expo-sharing') | null = null;
 try {
   Sharing = require('expo-sharing');
@@ -34,13 +35,18 @@ try {
   console.warn('[SessionDetail] expo-sharing unavailable:', e);
 }
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const CHART_WIDTH = SCREEN_WIDTH - 2 * space.md - 32; // account for panel padding
 const CHART_HEIGHT = 120;
 
 export default function SessionDetailScreen() {
  const { id } = useLocalSearchParams<{ id: string }>();
  const router = useRouter();
+ // Was a module-level Dimensions.get('window') snapshot of the raw device
+ // width — on an iPad that's ~1024px, far wider than the column
+ // ScreenScaffold actually renders this screen's content in (capped to
+ // APP_MAX_WIDTH), so the chart overflowed its panel. Reactive + capped to
+ // match.
+ const { width: windowWidth } = useWindowDimensions();
+ const chartWidth = Math.min(windowWidth, APP_MAX_WIDTH) - 2 * space.md - 32;
  const [session, setSession] = useState<SessionMeta | null>(null);
  const [loading, setLoading] = useState(true);
  const [peakData, setPeakData] = useState<number[]>([]);
@@ -183,7 +189,7 @@ export default function SessionDetailScreen() {
  <Panel style={styles.chartCard}>
  <Lbl>Peak Pressure Over Time</Lbl>
  <View style={styles.chartContainer}>
- <PressureChart data={peakData} width={CHART_WIDTH} height={CHART_HEIGHT} />
+ <PressureChart data={peakData} width={chartWidth} height={CHART_HEIGHT} />
  </View>
  <View style={styles.chartStats}>
  <Text style={styles.chartStatLabel}>Peak: {maxPressure.toFixed(1)} kPa</Text>

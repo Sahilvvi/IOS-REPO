@@ -48,4 +48,33 @@ export const space = {
  xxl: 32,
 };
 
+// React Native has no CSS box-shadow — iOS reads the shadow* properties,
+// Android only respects `elevation` (and ignores shadowColor/offset/etc
+// entirely), so every level below sets both. Nothing in the app used these
+// before; every Panel/StatTile/Btn was a flat bordered rectangle relying on
+// border color alone for depth, which reads flat against a dark background.
+export const shadow = {
+ sm: {
+ shadowColor: '#000000',
+ shadowOffset: { width: 0, height: 2 },
+ shadowOpacity: 0.25,
+ shadowRadius: 4,
+ elevation: 2,
+ },
+ md: {
+ shadowColor: '#000000',
+ shadowOffset: { width: 0, height: 6 },
+ shadowOpacity: 0.3,
+ shadowRadius: 10,
+ elevation: 5,
+ },
+ glow: {
+ shadowColor: color.cyan,
+ shadowOffset: { width: 0, height: 0 },
+ shadowOpacity: 0.35,
+ shadowRadius: 12,
+ elevation: 6,
+ },
+};
+
 export const APP_MAX_WIDTH = 460;

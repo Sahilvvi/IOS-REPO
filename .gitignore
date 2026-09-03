@@ -19,7 +19,6 @@ build/
 Thumbs.db
 
 # Expo / EAS
-eas.json
 .env
 .env.local
 

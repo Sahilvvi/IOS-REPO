@@ -8,7 +8,7 @@ import { useProfile } from '@/context/ProfileContext';
 import { FitRing, ConnectDeviceCard } from '@/components';
 import { Panel, Row, StatTile, Bar, Btn, Lbl, Body, Sub, ScreenScaffold, Dot } from '@/components/ui';
 import { color, font, space, radius } from '@/theme/tokens';
-import { getTodaySessionStats, listSessions } from '@/services/SessionService';
+import { getTodaySessionStats, listSessions, formatDate, formatDuration, SessionMeta } from '@/services/SessionService';
 import { pushSession } from '@/services/CloudSyncService';
 
 export default function TodayScreen() {
@@ -19,26 +19,38 @@ export default function TodayScreen() {
  const { activeProfile } = useProfile();
  const [sessionCount, setSessionCount] = useState(0);
  const [totalHours, setTotalHours] = useState(0);
+ const [recentSessions, setRecentSessions] = useState<SessionMeta[]>([]);
  const [greeting, setGreeting] = useState('');
  const [toggling, setToggling] = useState(false);
 
- useEffect(() => {
- (async () => {
+ const refreshSessions = useCallback(async () => {
  const stats = await getTodaySessionStats();
  setSessionCount(stats.count);
  setTotalHours(stats.totalHours);
+ const all = await listSessions();
+ setRecentSessions(all.slice(-3).reverse());
+ }, []);
+
+ useEffect(() => {
+ (async () => {
+ await refreshSessions();
  const hour = new Date().getHours();
  const g = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
  setGreeting(activeProfile ? `${g}, ${activeProfile.name}` : `${g}`);
  })();
- }, [activeProfile]);
+ }, [activeProfile, refreshSessions]);
 
  useFocusEffect(
  useCallback(() => {
  let c = false;
  (async () => {
  const stats = await getTodaySessionStats();
- if (!c) { setSessionCount(stats.count); setTotalHours(stats.totalHours); }
+ const all = await listSessions();
+ if (!c) {
+ setSessionCount(stats.count);
+ setTotalHours(stats.totalHours);
+ setRecentSessions(all.slice(-3).reverse());
+ }
  })();
  return () => { c = true; };
  }, [])
@@ -55,9 +67,7 @@ export default function TodayScreen() {
  const meta = (await listSessions()).find(s => s.id === sid);
  if (meta) pushSession(meta, activeProfile.id);
  }
- const stats = await getTodaySessionStats();
- setSessionCount(stats.count);
- setTotalHours(stats.totalHours);
+ await refreshSessions();
  } else {
  await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
  await session.startSession(activeProfile?.patient_id ?? 'unknown');
@@ -167,27 +177,30 @@ export default function TodayScreen() {
  </Panel>
 
  <Panel style={styles.planCard}>
- <Lbl>Today's Plan</Lbl>
- <View style={styles.planRow}>
+ <Row style={{ justifyContent: 'space-between', alignItems: 'center', marginBottom: recentSessions.length ? space.sm : 0 }}>
+ <Lbl style={{ marginBottom: 0 }}>Recent Sessions</Lbl>
+ {recentSessions.length > 0 && (
+ <TouchableOpacity onPress={() => router.push('/sessions')}>
+ <Text style={styles.planViewAll}>VIEW ALL</Text>
+ </TouchableOpacity>
+ )}
+ </Row>
+ {recentSessions.length === 0 ? (
+ <Text style={styles.planEmpty}>No sessions recorded yet — start one above to see it here.</Text>
+ ) : (
+ recentSessions.map(s => (
+ <View key={s.id} style={styles.planRow}>
  <View style={styles.planDot} />
  <View style={styles.planContent}>
- <Text style={styles.planItem}>Morning walk + clinic check-in</Text>
- <Text style={styles.planTime}>9:00 AM</Text>
+ <Text style={styles.planItem}>{formatDate(s.startMs)}</Text>
+ <Text style={styles.planTime}>{s.subjectId} · {s.rows} samples</Text>
  </View>
- <View style={[styles.planCheck, { backgroundColor: color.green + '20', borderColor: color.green }]}>
- <Text style={[styles.planCheckText, { color: color.green }]}>DONE</Text>
- </View>
- </View>
- <View style={styles.planRow}>
- <View style={[styles.planDot, { backgroundColor: color.amber }]} />
- <View style={styles.planContent}>
- <Text style={styles.planItem}>Afternoon wear — watch hot spot</Text>
- <Text style={styles.planTime}>2:00 PM</Text>
- </View>
- <View style={[styles.planCheck, { backgroundColor: color.amber + '20', borderColor: color.amber }]}>
- <Text style={[styles.planCheckText, { color: color.amber }]}>NEXT</Text>
+ <View style={[styles.planCheck, { backgroundColor: color.cyan + '20', borderColor: color.cyan }]}>
+ <Text style={[styles.planCheckText, { color: color.cyan }]}>{formatDuration(s.durationSec)}</Text>
  </View>
  </View>
+ ))
+ )}
  </Panel>
  </ScrollView>
  </ScreenScaffold>
@@ -228,6 +241,8 @@ const styles = StyleSheet.create({
  sessionBtn: { marginTop: space.md, alignSelf: 'stretch' },
  recordingHint: { fontFamily: 'DM Mono_400Regular', fontSize: 10, color: color.amber, marginTop: 6, textAlign: 'center' },
  planCard: { padding: space.md, marginBottom: space.md },
+ planViewAll: { fontFamily: 'DM Mono_500Medium', fontSize: 9, letterSpacing: 1, color: color.textFaint },
+ planEmpty: { fontFamily: 'Manrope_400Regular', fontSize: 12, color: color.textFaint, lineHeight: 18 },
  planRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm, marginBottom: space.md },
  planDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: color.green },
  planContent: { flex: 1 },

@@ -10,7 +10,7 @@ import Animated, {
  withDelay,
 } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
-import { color, font, space, radius } from '@/theme/tokens';
+import { color, font, space, radius, shadow } from '@/theme/tokens';
 
 interface AnimatedPanelProps {
  delay?: number;
@@ -78,6 +78,7 @@ const styles = StyleSheet.create({
  borderColor: color.line,
  borderRadius: radius.md,
  padding: space.md,
+ ...shadow.sm,
  },
  gradient: {
  backgroundColor: 'transparent',
@@ -91,6 +92,7 @@ const styles = StyleSheet.create({
  borderRadius: radius.md,
  padding: space.md,
  flex: 1,
+ ...shadow.sm,
  },
  tileLabel: {
  flexDirection: 'row',

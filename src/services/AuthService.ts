@@ -18,7 +18,16 @@ export async function signIn(email: string, password: string): Promise<{ ok: boo
 
 export async function signUp(email: string, password: string): Promise<{ ok: boolean; error?: string }> {
  if (!isSupabaseConfigured) return { ok: false, error: 'Cloud sync not configured' };
- const { error } = await supabase.auth.signUp({ email, password });
+ // Without an explicit emailRedirectTo, Supabase falls back to the
+ // dashboard's Site URL (which was unset, defaulting to Supabase's own
+ // placeholder) — the confirmation email's link would send users nowhere
+ // near the app instead of deep-linking back in via the `avafit://` scheme
+ // declared in app.json.
+ const { error } = await supabase.auth.signUp({
+ email,
+ password,
+ options: { emailRedirectTo: 'avafit://login' },
+ });
  return error ? { ok: false, error: error.message } : { ok: true };
 }
 

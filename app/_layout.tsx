@@ -9,6 +9,7 @@ import { ProfileProvider } from '@/context/ProfileContext';
 import { AuthProvider, useAuth } from '@/context/AuthContext';
 import { OnboardingProvider, useOnboarding } from '@/context/OnboardingContext';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
+import { BootSplash } from '@/components/BootSplash';
 import { color } from '@/theme/tokens';
 
 SplashScreen.preventAutoHideAsync();
@@ -57,7 +58,7 @@ function Gate() {
  if (ready) SplashScreen.hideAsync();
  }, [ready]);
 
- if (!ready) return null;
+ if (!ready) return <BootSplash />;
 
  return (
  <Stack

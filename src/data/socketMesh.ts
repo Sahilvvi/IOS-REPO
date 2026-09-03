@@ -247,19 +247,3 @@ export const SOCKET_MESH_B64 = [
   "bRg0GCkYKRg0GCgYNBg1GCgYKBg1GCcYNxgmGDUYJRg3GCQYOBgiGCQYIxgkGCIYIBgvGB8YTgwdGB4YHBgxGFEYSxhQGE8Y", "RxhPGEoYRxhLGE8YShhnGEkYaRhKGGwYTxhsGEoYYBhPGFAYThhjGFAYYxhOGE0YHBgsGCsYLwQsBS0FLAVeBkAH/QdeBv8H", "XgaeBv8HMwXhBDEFngb9B/8HngafBjMFLwWhFzMFLwUzBTEFKQVdBpQGNQ/iDzQPkwxSDI4MkwyODI8MgReQDJEMGg2PDJAM", "jgxODE8MoA2eDcIOwg6eDaANoA2eDcIOng2LDMIOwg6LDKANoA2LDEwMSAyFDEUMhQyaDRUNFQ2aDfINwg4nDvUNwg71DaAN", "wg6gDUwMohfCDkwMhwxMDIsMhwyiF0wMRwwHDYYMhgwHDUcM8w0HDYoM8w2KDJ0NxQ7GDvUNxg7FDvUNiAcECIYHQgdDB0EH", "MQVfBkIHNQU0BR0GsgsrDEsMjQyKDEsMjQxLDIoMxQ71DcYOTAxxFy0MIAltFwQIOgWHFzgFOAWHF+YE5gSJFzYFiRcdBjYF", "NgUdBjQFoAaFB50GewmaFyUKmheXFyUKJQqXF+8K7wpLDCsMigyRF50N9A2PF8cOrwQwBS4FgAc+B4EHPgeYBoEHmQYyBZ0G", "MgUuBTAFSheUBigFShcoBSkFKAVKFykFlAYpBSgFlAYoBSkFkQyQDE4MjgxODE8MjgxPDJAMjwyODJAMMg0VDcAOLgWgBjAF",
   "LgWgBjAFahcuBTAFahcwBaAGQAc/By0FIw4TDUQXMQVBBzMFQQcxBUIHQQehFzMFoRcvBTMFLwW7FzEFMQW7F0IHuxfMF0IH", "zBehF0EHTgyODE8MjgyTDI8MQgfMF0EH",
 ].join('');
-
-
-// Decode + prepare (normals, auto-placed sensors, blend radius) in one call —
-// SocketViewer.native.tsx expects a ready-to-render mesh with `sensors` set.
-import { decodePackedMesh as decodeRaw, prepareMesh } from '@/gl/mesh';
-
-export const decodePackedMesh = (b64: string) => {
-  if (!b64) {
-    // No packed mesh available — minimal fallback so the viewer never crashes.
-    return {
-      positions: new Float32Array([0, 0, 0, 1, 0, 0, 0, 1, 0]),
-      indices: undefined,
-    };
-  }
-  return prepareMesh(decodeRaw(b64));
-};
