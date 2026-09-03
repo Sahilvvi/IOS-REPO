@@ -99,7 +99,13 @@ export default function LoginScreen() {
     <View style={styles.root}>
       <SensorGridTexture width={width} height={height} fade="top" />
       <SafeAreaView style={styles.safe}>
-        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        {/* `undefined` behavior on Android is a no-op — it relies entirely on
+            the OS auto-resizing the window for the keyboard, which app.json's
+            `android.edgeToEdgeEnabled: true` breaks (a known interaction:
+            edge-to-edge changes how insets are handled and stops the window
+            from resizing itself), so on Android the keyboard was covering
+            the form with no compensation at all. */}
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
           <ScrollView
             contentContainerStyle={styles.scroll}
             keyboardShouldPersistTaps="handled"

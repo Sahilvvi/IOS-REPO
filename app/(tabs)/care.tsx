@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Linking, Alert, Modal, TextInput } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Linking, Alert, Modal, TextInput, KeyboardAvoidingView, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { ScreenScaffold, Panel, Lbl, Btn } from '@/components/ui';
@@ -222,6 +222,50 @@ function EmptyRow({ text, action, onPress }: { text: string; action: string; onP
   );
 }
 
+/**
+ * Shared bottom-sheet shell for the two edit forms below. Fixes the bug
+ * where opening the keyboard (e.g. for the PHONE field) covered the title
+ * and pushed Cancel/Save off-screen with no way back — the card had no
+ * KeyboardAvoidingView and no scroll region, so anything the keyboard
+ * overlapped simply became unreachable. Now: the keyboard pads the whole
+ * sheet up, the title + an explicit close (✕) stay pinned above the fields
+ * no matter what, the fields scroll in the space that's left, and tapping
+ * the backdrop also closes it.
+ */
+function ModalSheet({
+  visible, title, onClose, children, footer,
+}: {
+  visible: boolean;
+  title: string;
+  onClose: () => void;
+  children: React.ReactNode;
+  footer: React.ReactNode;
+}) {
+  return (
+    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
+      {/* `undefined` behavior is a no-op on Android — see the note on the
+          equivalent KeyboardAvoidingView in app/login.tsx for why that
+          matters with edge-to-edge enabled. */}
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+        <TouchableOpacity activeOpacity={1} style={styles.modalBackdrop} onPress={onClose}>
+          <TouchableOpacity activeOpacity={1} onPress={() => {}} style={styles.modalCard}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>{title}</Text>
+              <TouchableOpacity onPress={onClose} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                <Text style={styles.modalCloseIcon}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} style={styles.modalScroll}>
+              {children}
+            </ScrollView>
+            <View style={styles.modalFooter}>{footer}</View>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </KeyboardAvoidingView>
+    </Modal>
+  );
+}
+
 function ClinicianModal({ visible, initial, onClose, onSave }: {
   visible: boolean;
   initial?: { name: string; role: string; phone: string };
@@ -234,20 +278,21 @@ function ClinicianModal({ visible, initial, onClose, onSave }: {
   React.useEffect(() => { if (visible) { setName(initial?.name ?? ''); setRole(initial?.role ?? ''); setPhone(initial?.phone ?? ''); } }, [visible]);
 
   return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
-      <View style={styles.modalBackdrop}>
-        <View style={styles.modalCard}>
-          <Text style={styles.modalTitle}>Clinician Info</Text>
-          <ModalField label="NAME" value={name} onChangeText={setName} placeholder="Dr. Jane Smith" />
-          <ModalField label="ROLE" value={role} onChangeText={setRole} placeholder="Lead Prosthetist" />
-          <ModalField label="PHONE" value={phone} onChangeText={setPhone} placeholder="+1 555 0100" keyboardType="phone-pad" />
-          <View style={{ flexDirection: 'row', gap: space.sm, marginTop: space.md }}>
-            <Btn tone="ghost" onPress={onClose} style={{ flex: 1 }}>Cancel</Btn>
-            <Btn tone="cyan" onPress={() => name.trim() && onSave({ name: name.trim(), role: role.trim(), phone: phone.trim() })} style={{ flex: 1 }}>Save</Btn>
-          </View>
+    <ModalSheet
+      visible={visible}
+      title="Clinician Info"
+      onClose={onClose}
+      footer={
+        <View style={{ flexDirection: 'row', gap: space.sm }}>
+          <Btn tone="ghost" onPress={onClose} style={{ flex: 1 }}>Cancel</Btn>
+          <Btn tone="cyan" onPress={() => name.trim() && onSave({ name: name.trim(), role: role.trim(), phone: phone.trim() })} style={{ flex: 1 }}>Save</Btn>
         </View>
-      </View>
-    </Modal>
+      }
+    >
+      <ModalField label="NAME" value={name} onChangeText={setName} placeholder="Dr. Jane Smith" />
+      <ModalField label="ROLE" value={role} onChangeText={setRole} placeholder="Lead Prosthetist" />
+      <ModalField label="PHONE" value={phone} onChangeText={setPhone} placeholder="+1 555 0100" keyboardType="phone-pad" />
+    </ModalSheet>
   );
 }
 
@@ -262,19 +307,20 @@ function AppointmentModal({ visible, initial, onClose, onSave }: {
   React.useEffect(() => { if (visible) { setDateLabel(initial?.date_label ?? ''); setTimeLabel(initial?.time_label ?? ''); } }, [visible]);
 
   return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
-      <View style={styles.modalBackdrop}>
-        <View style={styles.modalCard}>
-          <Text style={styles.modalTitle}>Next Appointment</Text>
-          <ModalField label="DATE" value={dateLabel} onChangeText={setDateLabel} placeholder="Thursday, 4 September" />
-          <ModalField label="TIME & LOCATION" value={timeLabel} onChangeText={setTimeLabel} placeholder="10:30 AM · Quorum Prosthetics Clinic" />
-          <View style={{ flexDirection: 'row', gap: space.sm, marginTop: space.md }}>
-            <Btn tone="ghost" onPress={onClose} style={{ flex: 1 }}>Cancel</Btn>
-            <Btn tone="cyan" onPress={() => dateLabel.trim() && onSave({ date_label: dateLabel.trim(), time_label: timeLabel.trim() })} style={{ flex: 1 }}>Save</Btn>
-          </View>
+    <ModalSheet
+      visible={visible}
+      title="Next Appointment"
+      onClose={onClose}
+      footer={
+        <View style={{ flexDirection: 'row', gap: space.sm }}>
+          <Btn tone="ghost" onPress={onClose} style={{ flex: 1 }}>Cancel</Btn>
+          <Btn tone="cyan" onPress={() => dateLabel.trim() && onSave({ date_label: dateLabel.trim(), time_label: timeLabel.trim() })} style={{ flex: 1 }}>Save</Btn>
         </View>
-      </View>
-    </Modal>
+      }
+    >
+      <ModalField label="DATE" value={dateLabel} onChangeText={setDateLabel} placeholder="Thursday, 4 September" />
+      <ModalField label="TIME & LOCATION" value={timeLabel} onChangeText={setTimeLabel} placeholder="10:30 AM · Quorum Prosthetics Clinic" />
+    </ModalSheet>
   );
 }
 
@@ -358,8 +404,17 @@ const styles = StyleSheet.create({
   supportChevron: { fontFamily: 'DM Mono_400Regular', fontSize: 20, color: color.textFaint, fontWeight: '300' },
   divider: { height: 1, backgroundColor: color.line, marginVertical: 4 },
   modalBackdrop: { flex: 1, backgroundColor: 'rgba(4,8,16,0.7)', justifyContent: 'flex-end' },
-  modalCard: { backgroundColor: color.panel, borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg, borderWidth: 1, borderColor: color.line, padding: space.lg, paddingBottom: space.xl },
-  modalTitle: { fontFamily: font.bodyBold, fontSize: 18, color: color.text, marginBottom: space.sm },
+  modalCard: { maxHeight: '85%', backgroundColor: color.panel, borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg, borderWidth: 1, borderColor: color.line, padding: space.lg, paddingBottom: space.xl },
+  modalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  modalCloseIcon: { fontFamily: font.body, fontSize: 16, color: color.textFaint, padding: 4 },
+  // React Native's default flexShrink is 0 (unlike web CSS's 1) — without
+  // setting it explicitly here, this ScrollView wouldn't shrink to fit
+  // modalCard's maxHeight at all, and its overflow would just get clipped
+  // by the parent instead of becoming scrollable, reintroducing the exact
+  // "can't reach it" bug this component exists to fix.
+  modalScroll: { flexGrow: 0, flexShrink: 1, marginTop: space.sm },
+  modalFooter: { marginTop: space.md },
+  modalTitle: { fontFamily: font.bodyBold, fontSize: 18, color: color.text },
   modalFieldLabel: { fontFamily: font.mono, fontSize: 10, letterSpacing: 1, color: color.textFaint, marginBottom: 6 },
   modalInput: { fontFamily: font.body, fontSize: 14, color: color.text, borderWidth: 1, borderColor: color.line, backgroundColor: color.panelDeep, borderRadius: radius.sm, paddingHorizontal: space.sm, paddingVertical: 12 },
   infoBody: { fontFamily: font.body, fontSize: 13, color: color.textDim, lineHeight: 20 },

@@ -8,6 +8,7 @@
  *
  * Falls back to a simulation source on any BLE failure.
  */
+import { Platform, PermissionsAndroid } from 'react-native';
 import { PressureFrame, PressureSource, SENSOR_COUNT } from './types';
 import { SERVICE_UUID, PRESSURE_CHAR_UUID, DEVICE_NAMES } from './deviceConfig';
 
@@ -126,8 +127,45 @@ export class BlePressureSource implements PressureSource {
     };
   }
 
+  /** Android treats BLE scan/connect as dangerous runtime permissions —
+   * listing them in app.json's android.permissions only puts them in the
+   * manifest, it does NOT grant them. Without this request, startDeviceScan
+   * silently returns nothing (or a permission error the old code discarded),
+   * which reads to the user as "Bluetooth never finds my device" forever.
+   * iOS has no equivalent step here — its Bluetooth prompt is driven by
+   * BleManager itself the first time it's used. */
+  private async ensureAndroidPermissions(): Promise<boolean> {
+    if (Platform.OS !== 'android') return true;
+    try {
+      if (Platform.Version >= 31) {
+        const granted = await PermissionsAndroid.requestMultiple([
+          PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN,
+          PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT,
+        ]);
+        return (
+          granted[PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN] === PermissionsAndroid.RESULTS.GRANTED &&
+          granted[PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT] === PermissionsAndroid.RESULTS.GRANTED
+        );
+      }
+      // Below API 31, BLE scanning is gated behind location permission instead.
+      const granted = await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION);
+      return granted === PermissionsAndroid.RESULTS.GRANTED;
+    } catch {
+      return false;
+    }
+  }
+
   private async connect(onFrame: (frame: PressureFrame) => void): Promise<void> {
     try {
+      const hasPermission = await this.ensureAndroidPermissions();
+      if (!this.alive) return;
+      if (!hasPermission) {
+        this.setStatus('fallback');
+        this.setError('Bluetooth permission was denied — enable it for AVA Fit in system settings, then reconnect.');
+        this.fallback.subscribe(onFrame);
+        return;
+      }
+
       const btReady = await this.waitForBluetooth();
       if (!this.alive) return;
       if (!btReady) {
@@ -268,33 +306,49 @@ export class BlePressureSource implements PressureSource {
     const manager = this.manager || new BleManager();
 
     for (let attempt = 0; attempt < 3; attempt++) {
-      const device = await this.scan(manager);
-      if (device) return device;
+      const result = await this.scan(manager);
+      if (result.device) return result.device;
+      // A scan-level error (permission denied, adapter dropped mid-scan) —
+      // retrying two more 8s attempts won't change the outcome. Previously
+      // this branch was unreachable because the callback below silently
+      // discarded every scan error, so on a real permission failure the app
+      // would just sit at "Scanning…" for the full 24s with no indication
+      // anything had gone wrong.
+      if (result.fatal) break;
     }
     return null;
   }
 
-  private scan(manager: any): Promise<any> {
+  private scan(manager: any): Promise<{ device: any | null; fatal?: boolean }> {
     return new Promise((resolve) => {
       let found: any = null;
+      let settled = false;
+      const finish = (result: { device: any | null; fatal?: boolean }) => {
+        if (settled) return;
+        settled = true;
+        if (this.scanTimer) { clearTimeout(this.scanTimer); this.scanTimer = null; }
+        manager.stopDeviceScan();
+        resolve(result);
+      };
 
       manager.startDeviceScan(null, null, (error: any, device: any) => {
-        if (error || !device) return;
+        if (error) {
+          this.setError(`Scan error: ${error.message ?? 'unknown'} — using simulated data.`);
+          finish({ device: null, fatal: true });
+          return;
+        }
+        if (!device) return;
         const name = (device.name ?? device.localName ?? '').toLowerCase();
         if (DEVICE_NAMES.some(dn => name.includes(dn.toLowerCase()))) {
           this.noteDiscovered({ id: device.id, name: device.name ?? device.localName ?? 'Unknown device' });
           if (!found) {
             found = device;
-            manager.stopDeviceScan();
-            resolve(found);
+            finish({ device: found });
           }
         }
       });
 
-      this.scanTimer = setTimeout(() => {
-        manager.stopDeviceScan();
-        resolve(null);
-      }, 8000);
+      this.scanTimer = setTimeout(() => finish({ device: null }), 8000);
     });
   }
 
