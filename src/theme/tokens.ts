@@ -10,7 +10,10 @@ export const color = {
  trackBar: '#131C2E',
  text: '#E8EDF8',
  textDim: '#8A9BC0',
- textFaint: '#4F6192',
+ // Was #4F6192 — only ~3.3:1 against `bg`, below WCAG AA's 4.5:1 minimum
+ // for the small (9-11px) captions/disclaimers this is used for. Lightened
+ // to land at ~5.2:1 while staying visibly dimmer than textDim.
+ textFaint: '#6C82AC',
  cyan: '#00D4F5',
  cyanInk: '#04121A',
  green: '#2EE89E',

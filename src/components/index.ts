@@ -5,3 +5,4 @@ export { Panel, Row, Bar, Dot, Lbl, Body, Sub, Mono, Heading, Btn, StatTile } fr
 export { AnimatedPanel } from './AnimatedPanel';
 export { SocketViewer } from './SocketViewer';
 export { ConnectDeviceCard } from './ConnectDeviceCard';
+export { GearIcon } from './GearIcon';

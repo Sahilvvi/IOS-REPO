@@ -7,7 +7,7 @@ import * as FileSystem from 'expo-file-system/legacy';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFitReading, useClinicalReading, useDevice } from '@/pressure/PressureProvider';
 import { useProfile } from '@/context/ProfileContext';
-import { FitRing, PressureGrid, SocketViewer } from '@/components';
+import { FitRing, PressureGrid, SocketViewer, GearIcon } from '@/components';
 import { Panel, StatTile, Row, Bar, Btn, Lbl, Body, Sub, ScreenScaffold } from '@/components/ui';
 import { color, font, space, radius } from '@/theme/tokens';
 import { SENSOR_COUNT, REGIONS, SIDES } from '@/pressure/types';
@@ -40,6 +40,7 @@ export default function FitScreen() {
  const { width } = useWindowDimensions();
  const { activeProfile, updateActiveProfile } = useProfile();
  const [mesh, setMesh] = useState<PreparedMesh | null>(null);
+ const [viewerDragging, setViewerDragging] = useState(false);
 
  const grid = activeProfile?.grid ?? { rows: 3, cols: 6 };
  const mappingMethod: MappingMethod = (activeProfile?.mapping?.method as MappingMethod) ?? 'cylindrical';
@@ -81,17 +82,21 @@ export default function FitScreen() {
  title="Fit"
  rightAction={
  <TouchableOpacity onPress={() => router.push('/settings')} style={{ padding: 4 }}>
- <Text style={{ color: color.textFaint, fontSize: 16, fontFamily: 'DM Mono_500Medium' }}>⚙</Text>
+ <GearIcon size={18} />
  </TouchableOpacity>
  }
  >
- <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
+ <ScrollView
+ showsVerticalScrollIndicator={false}
+ contentContainerStyle={styles.scroll}
+ scrollEnabled={!viewerDragging}
+ >
  {/* Header section */}
  <Panel style={styles.headerPanel}>
  <View style={styles.headerRow}>
  <FitRing score={reading.fitScore} level={reading.level} />
  <View style={styles.headerText}>
- <Text style={styles.headline}>{reading.headline}</Text>
+ <Text style={[styles.headline, { color: reading.accent }]}>{reading.headline}</Text>
  <Text style={styles.advice}>{reading.advice}</Text>
  </View>
  </View>
@@ -105,6 +110,7 @@ export default function FitScreen() {
  hotIndex={reading.hotIndex}
  showSensors
  height={240}
+ onDragStateChange={setViewerDragging}
  />
  <View style={styles.viewerHint}>
  <Text style={styles.viewerHintText}>Drag to rotate · pinch to zoom</Text>
@@ -202,7 +208,10 @@ export default function FitScreen() {
  <Btn tone="ghost" onPress={async () => {
  device.zeroCalibrate();
  await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
- Alert.alert('Zeroed', 'Current sensor readings captured as the new baseline.');
+ Alert.alert(
+ 'Zeroed',
+ 'Current sensor readings captured as the new baseline — the scan will look flatter/lower-contrast right now since everything reads close to zero relative to it. That’s expected; color builds back up as pressure changes again.',
+ );
  }}>
  Re-zero Fit
  </Btn>

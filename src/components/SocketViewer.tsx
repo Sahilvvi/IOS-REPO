@@ -18,6 +18,13 @@ interface Props {
   hotIndex: number;
   showSensors?: boolean;
   height?: number;
+  /** Fires true the instant a rotate/pinch touch begins here and false on
+   * release — lets the parent screen disable its own ScrollView for the
+   * duration. Without this, a vertical drag reads to the enclosing
+   * ScrollView as a scroll gesture too, and the two fight over the touch:
+   * the model rotates roughly and the page slides underneath it at the
+   * same time instead of one fluid motion. */
+  onDragStateChange?: (active: boolean) => void;
 }
 
 interface Scene {
@@ -44,7 +51,7 @@ interface Scene {
  * procedural fallback mesh) and web-only (SocketViewer.web.tsx, three.js)
  * pair — ported from the ava-fit-complete reference build.
  */
-export function SocketViewer({ mesh, frame, hotIndex, showSensors = true, height = 290 }: Props) {
+export function SocketViewer({ mesh, frame, hotIndex, showSensors = true, height = 290, onDragStateChange }: Props) {
   const [failed, setFailed] = useState(false);
 
   const glRef = useRef<ExpoWebGLRenderingContext | null>(null);
@@ -57,6 +64,8 @@ export function SocketViewer({ mesh, frame, hotIndex, showSensors = true, height
   const scales = useRef(new Float32Array(SENSOR_COUNT).fill(1));
   const cam = useRef({ theta: 0.6, phi: 1.42, dist: 300, home: 300, idle: 0, clock: 0 });
   const drag = useRef({ x: 0, y: 0, pinch: 0, active: false, lastTap: 0 });
+  const onDragStateChangeRef = useRef(onDragStateChange);
+  onDragStateChangeRef.current = onDragStateChange;
 
   showRef.current = showSensors;
   hotRef.current = hotIndex;
@@ -121,6 +130,15 @@ export function SocketViewer({ mesh, frame, hotIndex, showSensors = true, height
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
       onMoveShouldSetPanResponder: () => true,
+      // Capture (not just the plain Set variants above) matters here: this
+      // view usually sits inside a screen's ScrollView, and without capture
+      // a vertical drag can get claimed by the ScrollView's own scroll
+      // gesture instead of this responder — the model would rotate *and*
+      // the page would scroll under it at once, rather than one fluid
+      // rotate. Claiming from touch-start, before either recognizer has
+      // seen enough movement to otherwise decide, wins that race outright.
+      onStartShouldSetPanResponderCapture: () => true,
+      onMoveShouldSetPanResponderCapture: () => true,
       onPanResponderGrant: () => {
         const now = Date.now();
         if (now - drag.current.lastTap < 300) {
@@ -134,6 +152,7 @@ export function SocketViewer({ mesh, frame, hotIndex, showSensors = true, height
         drag.current.pinch = 0;
         drag.current.active = true;
         cam.current.idle = 0;
+        onDragStateChangeRef.current?.(true);
       },
       onPanResponderMove: (event, gesture) => {
         const touches = event.nativeEvent.touches;
@@ -163,10 +182,12 @@ export function SocketViewer({ mesh, frame, hotIndex, showSensors = true, height
       onPanResponderRelease: () => {
         drag.current.active = false;
         drag.current.pinch = 0;
+        onDragStateChangeRef.current?.(false);
       },
       onPanResponderTerminate: () => {
         drag.current.active = false;
         drag.current.pinch = 0;
+        onDragStateChangeRef.current?.(false);
       },
     }),
   ).current;

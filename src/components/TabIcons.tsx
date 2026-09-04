@@ -54,22 +54,27 @@ export function TabIcon({ name, focused, size = 22 }: { name: TabIconName; focus
           <Line x1={4} y1={18} x2={13} y2={18} {...props} />
         </Svg>
       );
-    case 'settings':
-      // A gear-ring — a ring with tick marks, matching the "instrument"
-      // vocabulary rather than a literal filled gear glyph.
+    case 'settings': {
+      // A real gear silhouette: thin radiating tick marks read as a sun/
+      // compass rose rather than a gear, so the teeth here are short, thick,
+      // flat-ended stubs (not thin rays) — the shape a gear icon actually
+      // needs to be recognizable at 22px.
+      const teeth = [0, 45, 90, 135, 180, 225, 270, 315].map(deg => {
+        const rad = (deg * Math.PI) / 180;
+        const x1 = 12 + Math.cos(rad) * 7.6;
+        const y1 = 12 + Math.sin(rad) * 7.6;
+        const x2 = 12 + Math.cos(rad) * 9.6;
+        const y2 = 12 + Math.sin(rad) * 9.6;
+        return <Line key={deg} x1={x1} y1={y1} x2={x2} y2={y2} {...props} strokeWidth={3} strokeLinecap="butt" />;
+      });
       return (
         <Svg width={size} height={size} viewBox="0 0 24 24">
+          {teeth}
           <Circle cx={12} cy={12} r={5.5} {...props} />
-          {[0, 60, 120, 180, 240, 300].map(deg => {
-            const rad = (deg * Math.PI) / 180;
-            const x1 = 12 + Math.cos(rad) * 8.4;
-            const y1 = 12 + Math.sin(rad) * 8.4;
-            const x2 = 12 + Math.cos(rad) * 10.4;
-            const y2 = 12 + Math.sin(rad) * 10.4;
-            return <Line key={deg} x1={x1} y1={y1} x2={x2} y2={y2} {...props} />;
-          })}
+          <Circle cx={12} cy={12} r={1.4} fill={c} stroke="none" />
         </Svg>
       );
+    }
     default:
       return <Rect width={size} height={size} fill="none" />;
   }

@@ -5,7 +5,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import { useFitReading, useClinicalReading, useSession } from '@/pressure/PressureProvider';
 import { useProfile } from '@/context/ProfileContext';
-import { FitRing, ConnectDeviceCard } from '@/components';
+import { FitRing, ConnectDeviceCard, GearIcon } from '@/components';
 import { Panel, Row, StatTile, Bar, Btn, Lbl, Body, Sub, ScreenScaffold, Dot } from '@/components/ui';
 import { color, font, space, radius } from '@/theme/tokens';
 import { getTodaySessionStats, listSessions, formatDate, formatDuration, SessionMeta } from '@/services/SessionService';
@@ -88,8 +88,8 @@ export default function TodayScreen() {
  <ScreenScaffold
  title="Today"
  rightAction={
- <TouchableOpacity onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); router.push('/settings'); }}>
- <Text style={{ color: color.textFaint, fontSize: 18, fontFamily: 'DM Mono_500Medium' }}>⚙</Text>
+ <TouchableOpacity onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); router.push('/settings'); }} style={{ padding: 4 }}>
+ <GearIcon size={18} />
  </TouchableOpacity>
  }
  >
@@ -105,8 +105,8 @@ export default function TodayScreen() {
  <View style={styles.fitRow}>
  <FitRing score={reading.fitScore} level={reading.level} />
  <View style={styles.fitText}>
- <Text style={[styles.fitTag, { color: reading.fitScore > 80 ? color.green : reading.fitScore > 60 ? color.amber : color.red }]}>{reading.tag}</Text>
- <Text style={styles.fitHeadline}>{reading.headline}</Text>
+ <Text style={[styles.fitTag, { color: reading.accent }]}>{reading.tag}</Text>
+ <Text style={[styles.fitHeadline, { color: reading.accent }]}>{reading.headline}</Text>
  <Text style={styles.fitSummary}>{reading.summary}</Text>
  </View>
  </View>
@@ -211,7 +211,7 @@ const styles = StyleSheet.create({
  scroll: { paddingBottom: space.xxl },
  welcome: { paddingVertical: space.md, paddingHorizontal: space.md },
  greeting: { fontFamily: 'Manrope_700Bold', fontSize: 26, color: color.text },
- greetingSub: { fontFamily: 'Manrope_400Regular', fontSize: 13, color: color.textDim, marginTop: 4 },
+ greetingSub: { fontFamily: 'Manrope_400Regular', fontSize: 14, color: color.textDim, marginTop: 4 },
  fitCard: { padding: space.md, marginBottom: space.md },
  fitRow: { flexDirection: 'row', alignItems: 'center', marginBottom: space.md },
  fitText: { flex: 1, marginLeft: space.md },

@@ -14,7 +14,7 @@ import { color, font, space, APP_MAX_WIDTH } from '@/theme/tokens';
 const PAGES = [
   {
     eyebrow: 'REAL-TIME PRESSURE MAPPING',
-    title: 'Feel exactly\nwhat your socket feels.',
+    title: 'See exactly\nwhat your socket feels.',
     body: 'Eighteen embedded sensors read pressure inside your socket, live — AVA Fit turns it into one clear score.',
     Hero: () => <HeroFitRing size={240} score={84} />,
   },

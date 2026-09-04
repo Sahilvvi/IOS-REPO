@@ -4,6 +4,7 @@ import { Svg, Rect } from 'react-native-svg';
 import { useFocusEffect } from 'expo-router';
 import { useRouter } from 'expo-router';
 import { ScreenScaffold, Panel, Lbl } from '@/components/ui';
+import { GearIcon } from '@/components';
 import { color, font, space } from '@/theme/tokens';
 import {
  listSessions, formatDuration, readSessionCsv, parseCsvRows, extractPressureData,
@@ -120,7 +121,7 @@ export default function TrendsScreen() {
  title="Trends"
  rightAction={
  <TouchableOpacity onPress={() => router.push('/settings')} style={{ padding: 4 }}>
- <Text style={{ color: color.textFaint, fontSize: 16, fontFamily: 'DM Mono_500Medium' }}>⚙</Text>
+ <GearIcon size={18} />
  </TouchableOpacity>
  }
  >

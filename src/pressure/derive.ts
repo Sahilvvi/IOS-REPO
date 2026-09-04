@@ -66,7 +66,7 @@ const COPY: Record<FitLevel, { tag: string; headline: string; summary: string; a
  advice: 'Try shifting your weight or adding a ply. This is the same spot that flagged on Saturday.',
  },
  'ease-off': {
- tag: 'Ease off',
+ tag: 'Take a break',
  headline: 'Time for a short break',
  summary: 'Pressure at your limb end is above your usual range. Take the socket off for ten minutes.',
  advice: 'Rest for ten minutes, then add a sock ply. If it still bites, log it for Valerie at Quorum.',

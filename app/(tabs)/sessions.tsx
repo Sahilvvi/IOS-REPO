@@ -4,6 +4,7 @@ import { useFocusEffect } from 'expo-router';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { ScreenScaffold, Panel, Lbl, Body, Btn } from '@/components/ui';
+import { GearIcon } from '@/components';
 import { color, font, space, radius } from '@/theme/tokens';
 import { listSessions, formatDuration, formatDate, type SessionMeta, deleteSession } from '@/services/SessionService';
 
@@ -59,7 +60,7 @@ export default function SessionsScreen() {
  title="Sessions"
  rightAction={
  <TouchableOpacity onPress={() => router.push('/settings')} style={{ padding: 4 }}>
- <Text style={{ color: color.textFaint, fontSize: 16, fontFamily: 'DM Mono_500Medium' }}>⚙</Text>
+ <GearIcon size={18} />
  </TouchableOpacity>
  }
  >
@@ -76,7 +77,7 @@ export default function SessionsScreen() {
  title={`Sessions (${sessions.length})`}
  rightAction={
  <TouchableOpacity onPress={() => router.push('/settings')} style={{ padding: 4 }}>
- <Text style={{ color: color.textFaint, fontSize: 16, fontFamily: 'DM Mono_500Medium' }}>⚙</Text>
+ <GearIcon size={18} />
  </TouchableOpacity>
  }
  >

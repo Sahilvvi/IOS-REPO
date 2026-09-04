@@ -214,7 +214,7 @@ const styles = StyleSheet.create({
   eyebrow: { fontFamily: font.monoMed, fontSize: 11, letterSpacing: 2.5, color: color.textFaint, marginBottom: space.lg },
   title: { fontFamily: font.bodyXbold, fontSize: 34, lineHeight: 38, color: color.text, letterSpacing: -0.5, maxWidth: 270 },
   rule: { width: 34, height: 2, backgroundColor: color.cyan, marginTop: space.md, marginBottom: space.sm },
-  sub: { fontFamily: font.mono, fontSize: 12, color: color.textDim, lineHeight: 18, maxWidth: 260 },
+  sub: { fontFamily: font.mono, fontSize: 13, color: color.textDim, lineHeight: 19, maxWidth: 260 },
   field: { marginBottom: space.lg },
   fieldLabel: { fontFamily: font.monoMed, fontSize: 10, letterSpacing: 1.5, color: color.textFaint, marginBottom: 8 },
   input: {
@@ -228,7 +228,7 @@ const styles = StyleSheet.create({
   },
   inputAccent: { borderBottomColor: color.cyan },
   error: { fontFamily: font.mono, fontSize: 11, color: color.red, marginBottom: space.md, lineHeight: 16 },
-  switchRow: { fontFamily: font.mono, fontSize: 11, color: color.textDim, marginTop: space.lg, letterSpacing: 0.3 },
+  switchRow: { fontFamily: font.mono, fontSize: 13, color: color.textDim, marginTop: space.lg, letterSpacing: 0.3, lineHeight: 19 },
   switchLink: { color: color.cyan },
   confirmBox: { alignItems: 'center', marginTop: space.xl, paddingVertical: space.md },
   confirmTitle: { fontFamily: font.bodySemi, fontSize: 15, color: color.text, marginBottom: space.sm },

@@ -2,7 +2,7 @@ export const USER_GUIDE = `GETTING STARTED
 Connect your socket sensor from the Today tab or Settings → Data Source. AVA Fit falls back to simulated data automatically if no device is found, so you can explore the app before hardware is connected.
 
 READING YOUR FIT SCORE
-The ring on the Today tab summarizes all 18 sensors into one score. Comfortable is green, Watch means one spot is trending high, Ease Off means take weight off soon.
+The ring on the Today tab summarizes all 18 sensors into one score. Comfortable is green, Watch means one spot is trending high, Take a Break means take weight off soon.
 
 THE FIT TAB
 Shows the live 18-sensor grid and a 3D view of your socket colored by pressure. Tap and drag to rotate, pinch to zoom.

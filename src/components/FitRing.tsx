@@ -45,8 +45,13 @@ export function FitRing({ score, level, size = SIZE }: FitRingProps) {
  const circumference = 2 * Math.PI * RADIUS;
  const offset = circumference - (displayScore / 100) * circumference;
  const accent = LEVEL_COLORS[level] || '#00D4F5';
- const label = level === 'comfortable' ? 'COMFORTABLE' : level === 'watch' ? 'WATCH' : 'EASE OFF';
+ const label = level === 'comfortable' ? 'COMFORTABLE' : level === 'watch' ? 'WATCH' : 'TAKE A BREAK';
  const color = level === 'comfortable' ? '#2EE89E' : level === 'watch' ? '#F5C842' : '#F54257';
+ // 'TAKE A BREAK' runs noticeably longer than 'COMFORTABLE'/'WATCH' — shrink
+ // size/tracking together past ~9 characters so it still fits the ring
+ // instead of clipping against the circle's inner width.
+ const labelFontSize = label.length > 9 ? 7.5 : 9;
+ const labelSpacing = label.length > 9 ? 0.8 : 1.5;
 
  return (
  <View style={[styles.container, { width: size, height: size }]}>
@@ -92,11 +97,11 @@ export function FitRing({ score, level, size = SIZE }: FitRingProps) {
  x={CENTER}
  y={CENTER + 20}
  fill={color}
- fontSize={9}
+ fontSize={labelFontSize}
  fontWeight="600"
  fontFamily="DM Mono_500Medium"
  textAnchor="middle"
- letterSpacing={1.5}
+ letterSpacing={labelSpacing}
  >
  {label}
  </SvgText>
