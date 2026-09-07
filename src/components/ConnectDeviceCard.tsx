@@ -1,71 +1,108 @@
-import React from 'react';
-import { View, Text, StyleSheet, Pressable } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, Pressable, ActivityIndicator } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { Panel, Dot } from './ui';
-import { DEVICE_NAMES, useDevice } from '@/pressure/PressureProvider';
+import { useDevice } from '@/pressure/PressureProvider';
 import { color, font, space, radius } from '@/theme/tokens';
 
-type SourceKind = 'simulated' | 'ble' | 'bridge';
-
-/** Home-screen "Connect Device" affordance — a 3-way picker (Simulator /
- * Bluetooth / Bridge) instead of a single BLE-only toggle, so a device that
- * genuinely isn't being found has both a diagnostic message and a working
- * fallback path (the Python bridge) rather than a dead end. Mirrors the
- * pattern proven in the ava-fit-complete reference build's ConnectionCard,
- * adapted onto this app's own Panel/Btn/Dot primitives. */
+/**
+ * Home-screen "Connect Device" affordance.
+ *
+ * Was a 3-way Simulator/Bluetooth/Bridge segmented control that put internal
+ * test-board names ("Scanning for Joe_AVA_fit, Rustin_AVA_fit, Demo_AVA_fit…")
+ * and dev jargon (Bridge = a Python tool no patient should ever need) right
+ * in front of a patient. Reduced to the one thing a patient actually wants —
+ * a single "Connect Your AVA Fit" button — with Simulator/Bridge still fully
+ * working underneath, just tucked behind a collapsed "Advanced" section for
+ * whoever's demoing or debugging.
+ */
 export function ConnectDeviceCard() {
   const device = useDevice();
+  const [advancedOpen, setAdvancedOpen] = useState(false);
 
-  const kind: SourceKind = device.useBridge ? 'bridge' : device.useBle ? 'ble' : 'simulated';
+  const connected = device.useBle && device.bleStatus === 'connected';
+  const connecting = device.useBle && device.bleStatus === 'scanning';
+  const failed = device.useBle && device.bleStatus === 'fallback';
+  const onBridge = device.useBridge;
+  const onSimulator = !device.useBle && !device.useBridge;
 
-  const select = (next: SourceKind) => {
+  const label = connected
+    ? 'AVA Fit Connected'
+    : connecting
+      ? 'Connecting…'
+      : failed
+        ? 'Tap to Try Again'
+        : 'Connect Your AVA Fit';
+
+  const dotColor = connected ? color.green : connecting ? color.amber : failed ? color.red : color.textFaint;
+
+  const detail = connected
+    ? 'Live pressure data is streaming from your socket.'
+    : connecting
+      ? 'Looking for your AVA Fit socket nearby…'
+      : failed
+        ? 'Couldn’t find your AVA Fit. Make sure it’s powered on and close by, then try again.'
+        : onBridge
+          ? 'Connected via bridge — using its test data.'
+          : 'Not connected yet — showing sample data for now.';
+
+  const onPressMain = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    if (next === 'simulated') {
-      if (device.useBle) device.toggleBle();
-      if (device.useBridge) device.disconnectBridge();
-    } else if (next === 'ble') {
-      if (!device.useBle) device.toggleBle();
+    if (onBridge) device.disconnectBridge();
+    if (device.useBle) {
+      if (failed) device.retryBle();
+      // else already connecting/connected — nothing to do
     } else {
-      device.connectBridge();
+      device.toggleBle();
     }
   };
 
-  const dotColor =
-    kind === 'simulated'
-      ? color.textFaint
-      : kind === 'ble'
-        ? device.bleStatus === 'connected' ? color.green : device.bleStatus === 'scanning' ? color.amber : color.red
-        : device.bridgeStatus?.connected ? color.green : device.bridgeStatus?.reachable ? color.amber : color.red;
-
-  const detail =
-    kind === 'simulated'
-      ? 'Using synthetic gait data.'
-      : kind === 'ble'
-        ? device.bleStatus === 'connected'
-          ? `Connected — ${DEVICE_NAMES[0]}`
-          : device.bleStatus === 'scanning'
-            ? `Scanning for ${DEVICE_NAMES.join(', ')}…`
-            : device.bleError ?? 'No device found — using simulated data.'
-        : device.bridgeStatus?.connected
-          ? `Bridge connected — ${device.bridgeStatus.source}${device.bridgeStatus.device ? ` (${device.bridgeStatus.device})` : ''}`
-          : device.bridgeStatus?.reachable
-            ? 'Bridge reachable but not connected to the socket — using its emulator.'
-            : device.bridgeStatus?.error ?? 'Connecting to bridge…';
-
   return (
     <Panel style={styles.card}>
-      <View style={styles.statusRow}>
-        <Dot color={dotColor} />
-        <Text style={styles.detail} numberOfLines={2}>{detail}</Text>
-      </View>
-      {kind === 'ble' && device.bleDevices.length > 1 && (
-        <Text style={styles.hint}>{device.bleDevices.length} matching devices nearby — connected to the first found.</Text>
+      <Pressable
+        onPress={onPressMain}
+        disabled={connecting}
+        style={({ pressed }) => [styles.mainButton, connected && styles.mainButtonConnected, pressed && styles.mainButtonPressed]}
+      >
+        {connecting ? (
+          <ActivityIndicator size="small" color={color.cyan} style={{ marginRight: 10 }} />
+        ) : (
+          <Dot color={dotColor} />
+        )}
+        <Text style={[styles.mainLabel, connected && styles.mainLabelConnected]}>{label}</Text>
+      </Pressable>
+
+      <Text style={styles.detail} numberOfLines={2}>{detail}</Text>
+
+      <Pressable
+        onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setAdvancedOpen((v) => !v); }}
+        style={styles.advancedToggle}
+        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+      >
+        <Text style={styles.advancedToggleText}>{advancedOpen ? 'HIDE ADVANCED' : 'ADVANCED'}</Text>
+      </Pressable>
+
+      {advancedOpen && (
+        <View style={styles.advancedPanel}>
+          <Option
+            label="Simulator"
+            active={onSimulator}
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              if (device.useBle) device.toggleBle();
+              if (device.useBridge) device.disconnectBridge();
+            }}
+          />
+          <Option
+            label="Bridge"
+            active={onBridge}
+            onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); device.connectBridge(); }}
+          />
+          {device.bleDevices.length > 1 && device.useBle && (
+            <Text style={styles.hint}>{device.bleDevices.length} matching devices nearby — connected to the first found.</Text>
+          )}
+        </View>
       )}
-      <View style={styles.optionRow}>
-        <Option label="Simulator" active={kind === 'simulated'} onPress={() => select('simulated')} />
-        <Option label="Bluetooth" active={kind === 'ble'} onPress={() => select('ble')} />
-        <Option label="Bridge" active={kind === 'bridge'} onPress={() => select('bridge')} />
-      </View>
     </Panel>
   );
 }
@@ -80,10 +117,26 @@ function Option({ label, active, onPress }: { label: string; active: boolean; on
 
 const styles = StyleSheet.create({
   card: { padding: space.md, marginBottom: space.md },
-  statusRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  detail: { flex: 1, fontFamily: font.monoMed, fontSize: 12, color: color.text, lineHeight: 16 },
-  hint: { fontFamily: font.mono, fontSize: 10, color: color.textFaint, marginTop: 6, lineHeight: 14 },
-  optionRow: { flexDirection: 'row', gap: space.xs, marginTop: space.sm },
+  mainButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 16,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: color.line,
+    backgroundColor: color.panelDeep,
+    gap: 10,
+  },
+  mainButtonConnected: { backgroundColor: color.green + '18', borderColor: color.green },
+  mainButtonPressed: { opacity: 0.85 },
+  mainLabel: { fontFamily: font.monoMed, fontSize: 13, letterSpacing: 0.5, color: color.text },
+  mainLabelConnected: { color: color.green },
+  detail: { fontFamily: font.mono, fontSize: 11, color: color.textFaint, marginTop: space.sm, lineHeight: 16, textAlign: 'center' },
+  advancedToggle: { alignSelf: 'center', marginTop: space.sm, paddingVertical: 4 },
+  advancedToggleText: { fontFamily: font.mono, fontSize: 9, letterSpacing: 1, color: color.textFaint },
+  advancedPanel: { marginTop: space.sm, paddingTop: space.sm, borderTopWidth: 1, borderTopColor: color.line, flexDirection: 'row', gap: space.xs, flexWrap: 'wrap' },
+  hint: { fontFamily: font.mono, fontSize: 10, color: color.textFaint, marginTop: 6, lineHeight: 14, width: '100%' },
   option: {
     flex: 1,
     paddingVertical: 8,

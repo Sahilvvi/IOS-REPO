@@ -41,6 +41,7 @@ export default function LoginScreen() {
   const { configured, signIn, signUp } = useAuth();
   const { width, height } = useWindowDimensions();
   const [mode, setMode] = useState<Mode>('signin');
+  const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -53,11 +54,16 @@ export default function LoginScreen() {
   const submit = async () => {
     setError(null);
     const trimmedEmail = email.trim();
+    const trimmedName = name.trim();
     if (!trimmedEmail || !password) {
       setError('Enter an email and password.');
       return;
     }
     if (mode === 'signup') {
+      if (!trimmedName) {
+        setError('Enter your name.');
+        return;
+      }
       if (password.length < 6) {
         setError('Password must be at least 6 characters.');
         return;
@@ -71,7 +77,7 @@ export default function LoginScreen() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     const res = mode === 'signin'
       ? await signIn(trimmedEmail, password)
-      : await signUp(trimmedEmail, password);
+      : await signUp(trimmedEmail, password, trimmedName);
     setBusy(false);
     if (!res.ok) {
       setError(res.error ?? 'Something went wrong.');
@@ -147,6 +153,9 @@ export default function LoginScreen() {
                 </Animated.View>
               ) : (
                 <Animated.View entering={FadeInDown.delay(200).springify().damping(16)} style={{ marginTop: space.xl }}>
+                  {mode === 'signup' && (
+                    <Field label="NAME" value={name} onChangeText={setName} placeholder="Jane Smith" accent />
+                  )}
                   <Field label="EMAIL" value={email} onChangeText={setEmail} placeholder="you@email.com" keyboardType="email-address" accent={false} />
                   <Field label="PASSWORD" value={password} onChangeText={setPassword} placeholder="••••••••" secureTextEntry accent={mode === 'signin'} />
                   {mode === 'signup' && (

@@ -11,7 +11,7 @@
 import { Platform, PermissionsAndroid } from 'react-native';
 import { PressureFrame, PressureSource, SENSOR_COUNT } from './types';
 import {
-  SERVICE_UUID, PRESSURE_CHAR_UUID, DEVICE_NAMES,
+  SERVICE_UUID, PRESSURE_CHAR_UUID, DEVICE_NAMES, LEGACY_DEVICE_NAMES, SCAN_DEVICE_NAMES,
   guardFrame,
   deviceByBleName,
   type DeviceProfile,
@@ -65,6 +65,12 @@ export class BlePressureSource implements PressureSource {
   private status: BleStatus = 'scanning';
   /** The board the user selected. Frames from any other are rejected. */
   private expectedDevice: DeviceProfile | null = null;
+  /** True when connected under one of LEGACY_DEVICE_NAMES rather than the
+   * DEVICES registry — guardFrame is skipped for these so a board that
+   * isn't (yet) on the new identity firmware connects exactly as it always
+   * did, instead of every frame being hard-rejected as "no device
+   * selected" just because it isn't in the registry. */
+  private isLegacyDevice = false;
   private statusListeners = new Set<(s: BleStatus) => void>();
   private error: string | null = null;
   private errorListeners = new Set<(msg: string | null) => void>();
@@ -186,7 +192,7 @@ export class BlePressureSource implements PressureSource {
       if (!this.device || !this.alive) {
         if (this.alive) {
           this.setStatus('fallback');
-          this.setError(`No device matching "${DEVICE_NAMES.join('", "')}" found nearby — make sure it's powered on and in range, then reconnect.`);
+          this.setError(`No device matching "${SCAN_DEVICE_NAMES.join('", "')}" found nearby — make sure it's powered on and in range, then reconnect.`);
           this.fallback.subscribe(onFrame);
         }
         return;
@@ -194,7 +200,11 @@ export class BlePressureSource implements PressureSource {
 
       // Remember which board this is, so every subsequent frame can be
       // checked against it.
-      this.expectedDevice = deviceByBleName(this.device.name ?? '') ?? null;
+      const deviceName = this.device.name ?? '';
+      this.expectedDevice = deviceByBleName(deviceName) ?? null;
+      this.isLegacyDevice =
+        !this.expectedDevice &&
+        LEGACY_DEVICE_NAMES.some(ln => deviceName.toLowerCase().includes(ln.toLowerCase()));
 
       await this.device.connect();
 
@@ -236,19 +246,24 @@ export class BlePressureSource implements PressureSource {
             const base64 = characteristic.value;
             const text = this.base64ToString(base64);
 
-            // Identity check before parsing. With three boards on one bench a
-            // silent reconnect to the wrong one would attribute this
-            // patient's pressure to another, and the UI would look
-            // completely normal.
-            const check = guardFrame(text, this.expectedDevice);
-            if (!check.ok) {
-              this.setError(check.reason);
-              this.setStatus('fallback');
-              return;
+            // Identity check before parsing — but only for boards found in
+            // the DEVICES registry. A legacy-named board was never in that
+            // registry to begin with, so guardFrame's "no device selected"
+            // branch would reject 100% of its frames; that's not a real
+            // identity mismatch, just a board that predates the registry.
+            let body = text;
+            if (!this.isLegacyDevice) {
+              const check = guardFrame(text, this.expectedDevice);
+              if (!check.ok) {
+                this.setError(check.reason);
+                this.setStatus('fallback');
+                return;
+              }
+              if (check.warning) this.setError(check.warning);
+              body = check.body;
             }
-            if (check.warning) this.setError(check.warning);
 
-            const parsed = parseCombinedFrame(check.body);
+            const parsed = parseCombinedFrame(body);
             if (parsed && parsed.pressure.length > 0) {
               const trimmed = parsed.pressure.slice(0, SENSOR_COUNT);
               while (trimmed.length < SENSOR_COUNT) trimmed.push(0);
@@ -370,7 +385,7 @@ export class BlePressureSource implements PressureSource {
         }
         if (!device) return;
         const name = (device.name ?? device.localName ?? '').toLowerCase();
-        if (DEVICE_NAMES.some(dn => name.includes(dn.toLowerCase()))) {
+        if (SCAN_DEVICE_NAMES.some(dn => name.includes(dn.toLowerCase()))) {
           this.noteDiscovered({ id: device.id, name: device.name ?? device.localName ?? 'Unknown device' });
           if (!found) {
             found = device;

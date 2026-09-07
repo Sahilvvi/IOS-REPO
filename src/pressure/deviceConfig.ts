@@ -38,6 +38,20 @@ export const LEGACY_DEVICE_NAMES = [
   'Quorum-AVA-FIT',
 ];
 
+/**
+ * What the scanner actually searches for.
+ *
+ * Assuming every physical board is already reflashed and advertising under
+ * its DEVICES name turned out to be wrong in the field — a board still on
+ * old firmware (or advertising a truncated/different name) is invisible to a
+ * scan that only matches DEVICE_NAMES, and the app just scans forever
+ * without ever finding anything to report an error about. Scanning for both
+ * costs nothing (matching is a cheap substring check) and a legacy name
+ * connects exactly as it did before the three-board identity system existed
+ * — see the isLegacyDevice bypass in BlePressureSource.ts.
+ */
+export const SCAN_DEVICE_NAMES = [...DEVICE_NAMES, ...LEGACY_DEVICE_NAMES];
+
 export function deviceByBleName(name: string): DeviceProfile | undefined {
   return DEVICES.find((d) => d.bleName === name);
 }

@@ -8,7 +8,7 @@ interface AuthState {
  loading: boolean;
  configured: boolean;
  signIn: (email: string, password: string) => Promise<{ ok: boolean; error?: string }>;
- signUp: (email: string, password: string) => Promise<{ ok: boolean; error?: string }>;
+ signUp: (email: string, password: string, name?: string) => Promise<{ ok: boolean; error?: string }>;
  signOut: () => Promise<void>;
 }
 

@@ -62,6 +62,12 @@ export interface DeviceApi {
   bridgeStatus: BridgeStatus | null;
   connectBridge: () => void;
   disconnectBridge: () => void;
+  /** Forces a fresh BLE connection attempt when already in `useBle` mode
+   * (e.g. tapping "Connect" again after a scan came back empty) — toggling
+   * `useBle` off/on in the same handler doesn't work here because React
+   * batches both updates into one render, so `active` never actually
+   * changes identity and the subscription effect never re-fires. */
+  retryBle: () => void;
   /** Zero/tare, scoped to the active profile (mirrors desktop's per-profile
    * calibration.zero_offsets) — a one-time baseline capture, not continuous
    * auto-zero, so a real load applied afterward is never masked. */
@@ -99,6 +105,7 @@ export function PressureProvider({ children }: { children: React.ReactNode }) {
   const [bleDevices, setBleDevices] = useState<DiscoveredDevice[]>([]);
   const [useBridge, setUseBridge] = useState(false);
   const [bridgeStatus, setBridgeStatus] = useState<BridgeStatus | null>(null);
+  const [bleRetryNonce, setBleRetryNonce] = useState(0);
   const simSource = useMemo(() => new SimulatedPressureSource(460), []);
   const bleSource = useMemo(() => new BlePressureSource(simSource), [simSource]);
   const httpSource = useMemo(() => new HttpPressureSource(), []);
@@ -188,7 +195,7 @@ export function PressureProvider({ children }: { children: React.ReactNode }) {
       cancelled = true;
       sub();
     };
-  }, [active]);
+  }, [active, bleRetryNonce]);
 
   // ---- BLE connection status ----
   useEffect(() => {
@@ -229,6 +236,13 @@ export function PressureProvider({ children }: { children: React.ReactNode }) {
 
   const disconnectBridge = useCallback(() => {
     setUseBridge(false);
+  }, []);
+
+  const retryBle = useCallback(() => {
+    resetDerive();
+    setFrame([...BASELINE_KPA]);
+    setClinical(NO_CLINICAL_DATA);
+    setBleRetryNonce((n) => n + 1);
   }, []);
 
   const zeroCalibrate = useCallback(() => {
@@ -278,12 +292,12 @@ export function PressureProvider({ children }: { children: React.ReactNode }) {
 
   const deviceApi = useMemo<DeviceApi>(
     () => ({
-      useBle, bleStatus, toggleBle, bleError, bleDevices,
+      useBle, bleStatus, toggleBle, bleError, bleDevices, retryBle,
       useBridge, bridgeStatus, connectBridge, disconnectBridge,
       hasZeroCalibration, zeroCalibrate, clearZeroCalibration,
       kalman, setKalman, resetKalman,
     }),
-    [useBle, bleStatus, toggleBle, bleError, bleDevices,
+    [useBle, bleStatus, toggleBle, bleError, bleDevices, retryBle,
       useBridge, bridgeStatus, connectBridge, disconnectBridge,
       hasZeroCalibration, zeroCalibrate, clearZeroCalibration,
       kalman, setKalman, resetKalman],
