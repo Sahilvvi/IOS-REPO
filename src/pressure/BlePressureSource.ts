@@ -10,7 +10,12 @@
  */
 import { Platform, PermissionsAndroid } from 'react-native';
 import { PressureFrame, PressureSource, SENSOR_COUNT } from './types';
-import { SERVICE_UUID, PRESSURE_CHAR_UUID, DEVICE_NAMES } from './deviceConfig';
+import {
+  SERVICE_UUID, PRESSURE_CHAR_UUID, DEVICE_NAMES,
+  guardFrame,
+  deviceByBleName,
+  type DeviceProfile,
+} from './deviceConfig';
 
 export { SERVICE_UUID, PRESSURE_CHAR_UUID, DEVICE_NAMES } from './deviceConfig';
 
@@ -58,6 +63,8 @@ export class BlePressureSource implements PressureSource {
   private alive = true;
   private scanTimer: ReturnType<typeof setTimeout> | null = null;
   private status: BleStatus = 'scanning';
+  /** The board the user selected. Frames from any other are rejected. */
+  private expectedDevice: DeviceProfile | null = null;
   private statusListeners = new Set<(s: BleStatus) => void>();
   private error: string | null = null;
   private errorListeners = new Set<(msg: string | null) => void>();
@@ -185,14 +192,25 @@ export class BlePressureSource implements PressureSource {
         return;
       }
 
+      // Remember which board this is, so every subsequent frame can be
+      // checked against it.
+      this.expectedDevice = deviceByBleName(this.device.name ?? '') ?? null;
+
       await this.device.connect();
-      const services = await this.device.discoverAllServicesAndCharacteristics();
+
+      // discoverAllServicesAndCharacteristics() resolves to the DEVICE, not a
+      // list of services — iterating its return value directly threw
+      // "TypeError: iterator method is not callable" on every connect, which
+      // surfaced in the UI as an opaque connection error. Discovery has to
+      // run first; services() then reads the results back off the device.
+      this.device = await this.device.discoverAllServicesAndCharacteristics();
+      const services = await this.device.services();
 
       let pressureChar: any = undefined;
-      for (const svc of services) {
+      for (const svc of services ?? []) {
         if (svc.uuid.toLowerCase() === SERVICE_UUID.toLowerCase()) {
           const chars = await this.device.characteristicsForService(svc.uuid);
-          pressureChar = chars.find((c: any) => c.uuid.toLowerCase() === PRESSURE_CHAR_UUID.toLowerCase());
+          pressureChar = (chars ?? []).find((c: any) => c.uuid.toLowerCase() === PRESSURE_CHAR_UUID.toLowerCase());
           break;
         }
       }
@@ -217,7 +235,20 @@ export class BlePressureSource implements PressureSource {
           try {
             const base64 = characteristic.value;
             const text = this.base64ToString(base64);
-            const parsed = parseCombinedFrame(text);
+
+            // Identity check before parsing. With three boards on one bench a
+            // silent reconnect to the wrong one would attribute this
+            // patient's pressure to another, and the UI would look
+            // completely normal.
+            const check = guardFrame(text, this.expectedDevice);
+            if (!check.ok) {
+              this.setError(check.reason);
+              this.setStatus('fallback');
+              return;
+            }
+            if (check.warning) this.setError(check.warning);
+
+            const parsed = parseCombinedFrame(check.body);
             if (parsed && parsed.pressure.length > 0) {
               const trimmed = parsed.pressure.slice(0, SENSOR_COUNT);
               while (trimmed.length < SENSOR_COUNT) trimmed.push(0);
