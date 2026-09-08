@@ -179,11 +179,11 @@ export class BlePressureSource implements PressureSource {
         return;
       }
 
-      const btReady = await this.waitForBluetooth();
+      const bt = await this.waitForBluetooth();
       if (!this.alive) return;
-      if (!btReady) {
+      if (!bt.ready) {
         this.setStatus('fallback');
-        this.setError('Bluetooth is off, unsupported, or permission was denied — using simulated data.');
+        this.setError(bt.reason ?? 'Bluetooth is off, unsupported, or permission was denied — using simulated data.');
         this.fallback.subscribe(onFrame);
         return;
       }
@@ -320,29 +320,68 @@ export class BlePressureSource implements PressureSource {
     }
   }
 
-  private async waitForBluetooth(): Promise<boolean> {
+  /**
+   * Root cause of "connects on one iPhone, never on another": 'Unauthorized'
+   * — the state while iOS's own Bluetooth permission dialog is showing,
+   * unanswered — was never explicitly handled here. It fell through both
+   * branches silently and just waited out a flat 8s timeout with a generic
+   * "off, unsupported, or denied" message that doesn't tell the user they
+   * simply haven't answered the prompt yet. A device that already granted
+   * permission in an earlier session (state resolves to PoweredOn almost
+   * instantly, no dialog) connects fine; a device seeing that system prompt
+   * for the first time often takes longer than 8 real-world seconds to
+   * notice it and tap Allow — and once they do, nothing resumed the attempt,
+   * since the promise had already resolved to failure.
+   *
+   * Fixed by: not resolving on Unauthorized (correctly keep waiting, the
+   * user might still be deciding), extending the timeout to something that
+   * gives real human reaction time, and reporting the specific reason so a
+   * pending-permission timeout reads as "you haven't answered yet" rather
+   * than "something is broken" — paired with the Connect button's existing
+   * retry path once they do grant it.
+   */
+  private async waitForBluetooth(): Promise<{ ready: boolean; reason?: string }> {
     return new Promise((resolve) => {
       const BleManager = require('react-native-ble-plx').BleManager;
       this.manager = new BleManager();
+      let lastState = 'Unknown';
+      let settled = false;
+
+      const finish = (ready: boolean, reason?: string) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeout);
+        resolve({ ready, reason });
+      };
 
       const check = async () => {
         try {
           const state = await this.manager.state();
-          if (state === 'PoweredOn') { resolve(true); return; }
-          if (state === 'Unsupported' || state === 'PoweredOff') { resolve(false); return; }
-        } catch { resolve(false); return; }
+          lastState = state;
+          if (state === 'PoweredOn') { finish(true); return; }
+          if (state === 'Unsupported') { finish(false, 'This device doesn’t support Bluetooth Low Energy.'); return; }
+          if (state === 'PoweredOff') { finish(false, 'Bluetooth is turned off — turn it on, then tap Connect again.'); return; }
+          // Unknown / Unauthorized / Resetting: a decision may still be
+          // pending (the permission dialog, or CoreBluetooth just spinning
+          // up) — keep waiting for onStateChange rather than giving up here.
+        } catch { finish(false, 'Couldn’t read the Bluetooth state.'); return; }
       };
 
       check();
 
       const timeout = setTimeout(() => {
-        this.manager?.stopDeviceScan();
-        resolve(false);
-      }, 8000);
+        if (lastState === 'Unauthorized') {
+          finish(false, 'Bluetooth permission hasn’t been granted yet — allow it when iOS asks, then tap Connect again.');
+        } else {
+          finish(false, 'Bluetooth is off, unsupported, or permission was denied — using simulated data.');
+        }
+      }, 20000);
 
       this.manager.onStateChange((newState: string) => {
-        if (newState === 'PoweredOn') { clearTimeout(timeout); resolve(true); }
-        else if (newState === 'Unsupported' || newState === 'PoweredOff') { clearTimeout(timeout); resolve(false); }
+        lastState = newState;
+        if (newState === 'PoweredOn') finish(true);
+        else if (newState === 'Unsupported') finish(false, 'This device doesn’t support Bluetooth Low Energy.');
+        else if (newState === 'PoweredOff') finish(false, 'Bluetooth is turned off — turn it on, then tap Connect again.');
       }, true);
     });
   }
