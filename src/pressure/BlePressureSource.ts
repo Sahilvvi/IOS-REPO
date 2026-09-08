@@ -74,6 +74,18 @@ export class BlePressureSource implements PressureSource {
   private statusListeners = new Set<(s: BleStatus) => void>();
   private error: string | null = null;
   private errorListeners = new Set<(msg: string | null) => void>();
+  /** True when the fix is "open iOS/Android Settings and enable Bluetooth
+   * for this app", not "wait and retry". react-native-ble-plx has no way to
+   * tell "permission decision still pending" apart from "permission was
+   * already denied" — both report as the identical CBManagerState
+   * 'Unauthorized' (confirmed: open GitHub issue on the library, no fix
+   * shipped). Retrying a genuinely-denied permission just repeats the same
+   * 20s timeout forever, since iOS will never show that system prompt a
+   * second time — only a Settings toggle recovers it. Since a Settings
+   * visit also fixes the "still pending" case, this is set for both rather
+   * than trying to guess which one it is. */
+  private needsSettings = false;
+  private needsSettingsListeners = new Set<(v: boolean) => void>();
   private discovered = new Map<string, DiscoveredDevice>();
   private deviceListListeners = new Set<(devices: DiscoveredDevice[]) => void>();
 
@@ -93,6 +105,14 @@ export class BlePressureSource implements PressureSource {
     this.errorListeners.add(cb);
     cb(this.error);
     return () => this.errorListeners.delete(cb);
+  }
+
+  /** True when recovering requires the user to open system Settings, not
+   * just tap Connect again. See the field comment on `needsSettings`. */
+  onNeedsSettings(cb: (v: boolean) => void): () => void {
+    this.needsSettingsListeners.add(cb);
+    cb(this.needsSettings);
+    return () => this.needsSettingsListeners.delete(cb);
   }
 
   /** Every device matching DEVICE_NAMES seen so far during the current scan —
@@ -115,6 +135,11 @@ export class BlePressureSource implements PressureSource {
     for (const cb of this.errorListeners) cb(msg);
   }
 
+  private setNeedsSettings(v: boolean) {
+    this.needsSettings = v;
+    for (const cb of this.needsSettingsListeners) cb(v);
+  }
+
   private noteDiscovered(device: DiscoveredDevice) {
     if (this.discovered.has(device.id)) return;
     this.discovered.set(device.id, device);
@@ -125,6 +150,7 @@ export class BlePressureSource implements PressureSource {
   subscribe(onFrame: (frame: PressureFrame) => void): () => void {
     this.setStatus('scanning');
     this.setError(null);
+    this.setNeedsSettings(false);
     this.discovered.clear();
     this.connect(onFrame).catch(() => {
       if (this.alive) {
@@ -175,6 +201,7 @@ export class BlePressureSource implements PressureSource {
       if (!hasPermission) {
         this.setStatus('fallback');
         this.setError('Bluetooth permission was denied — enable it for AVA Fit in system settings, then reconnect.');
+        this.setNeedsSettings(true);
         this.fallback.subscribe(onFrame);
         return;
       }
@@ -184,6 +211,7 @@ export class BlePressureSource implements PressureSource {
       if (!bt.ready) {
         this.setStatus('fallback');
         this.setError(bt.reason ?? 'Bluetooth is off, unsupported, or permission was denied — using simulated data.');
+        if (bt.needsSettings) this.setNeedsSettings(true);
         this.fallback.subscribe(onFrame);
         return;
       }
@@ -340,18 +368,41 @@ export class BlePressureSource implements PressureSource {
    * than "something is broken" — paired with the Connect button's existing
    * retry path once they do grant it.
    */
-  private async waitForBluetooth(): Promise<{ ready: boolean; reason?: string }> {
+  /**
+   * Confirmed root cause of "connects on one iPhone, never on another,
+   * however long you wait": react-native-ble-plx cannot tell "the user
+   * hasn't answered the permission dialog yet" apart from "the user already
+   * denied it, permanently" — both report as the identical CBManagerState
+   * 'Unauthorized' (open, unresolved upstream issue — the library's native
+   * iOS bridge doesn't expose CBCentralManager.authorization at all, only
+   * the coarse .state()). iOS shows its Bluetooth permission dialog exactly
+   * ONCE per install; if it was ever dismissed with "Don't Allow" — on any
+   * earlier build, including before this feature worked properly — the
+   * state is 'Unauthorized' forever and NO amount of waiting changes that,
+   * because there is no dialog left to answer. A device that happened to
+   * have someone tap "Allow" early on (e.g. whichever phone was used
+   * first, throughout testing) just works from then on; a device that got
+   * "Don't Allow" at any point is stuck until someone opens Settings and
+   * flips it back on by hand — that's the actual difference between
+   * devices, not anything about the hardware itself.
+   *
+   * Since this ambiguity can't be resolved from JS without a native
+   * module, needsSettings is set for both sub-cases: opening Settings
+   * fixes a genuinely denied permission, and does no harm if it was only
+   * ever pending.
+   */
+  private async waitForBluetooth(): Promise<{ ready: boolean; reason?: string; needsSettings?: boolean }> {
     return new Promise((resolve) => {
       const BleManager = require('react-native-ble-plx').BleManager;
       this.manager = new BleManager();
       let lastState = 'Unknown';
       let settled = false;
 
-      const finish = (ready: boolean, reason?: string) => {
+      const finish = (ready: boolean, reason?: string, needsSettings?: boolean) => {
         if (settled) return;
         settled = true;
         clearTimeout(timeout);
-        resolve({ ready, reason });
+        resolve({ ready, reason, needsSettings });
       };
 
       const check = async () => {
@@ -371,7 +422,11 @@ export class BlePressureSource implements PressureSource {
 
       const timeout = setTimeout(() => {
         if (lastState === 'Unauthorized') {
-          finish(false, 'Bluetooth permission hasn’t been granted yet — allow it when iOS asks, then tap Connect again.');
+          finish(
+            false,
+            'AVA Fit doesn’t have Bluetooth access — open Settings and turn it on, then tap Connect again.',
+            true,
+          );
         } else {
           finish(false, 'Bluetooth is off, unsupported, or permission was denied — using simulated data.');
         }

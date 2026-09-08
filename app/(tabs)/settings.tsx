@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, ScrollView, StyleSheet, Alert, TouchableOpacity, Modal, TextInput, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, Alert, TouchableOpacity, Modal, TextInput, KeyboardAvoidingView, Platform, Linking } from 'react-native';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { ScreenScaffold, Panel, Lbl, Btn, Row, StatTile, PressureGrid } from '@/components';
@@ -240,9 +240,14 @@ export default function SettingsScreen() {
  <Text style={styles.statusText}>
  {device.bleStatus === 'connected' ? `Connected — ${DEVICE_NAMES[0]}`
  : device.bleStatus === 'scanning' ? 'Scanning for device…'
- : 'No device found — using simulated data'}
+ : device.bleError ?? 'No device found — using simulated data'}
  </Text>
  </View>
+ )}
+ {device.useBle && device.bleStatus === 'fallback' && device.bleNeedsSettings && (
+ <Btn tone="amber" onPress={() => Linking.openSettings()} style={{ marginTop: space.sm, alignSelf: 'flex-start' }}>
+ Open Settings
+ </Btn>
  )}
  <Text style={styles.hint}>Scanning for: {DEVICE_NAMES.join(', ')}</Text>
  </Section>

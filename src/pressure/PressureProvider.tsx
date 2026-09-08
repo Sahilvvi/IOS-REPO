@@ -53,6 +53,11 @@ export interface DeviceApi {
   /** Human-readable reason for a 'fallback' bleStatus (Bluetooth off, no
    * device found, connection dropped, etc) — null when not in fallback. */
   bleError: string | null;
+  /** True when the fix for the current bleError is "open Settings and
+   * enable Bluetooth for this app", not "wait and tap Connect again" — see
+   * the comment on BlePressureSource's needsSettings field for why this
+   * can't be narrowed further than that from JS. */
+  bleNeedsSettings: boolean;
   /** Devices matching DEVICE_NAMES seen during the current/last BLE scan. */
   bleDevices: DiscoveredDevice[];
   /** The Python-bridge HTTP source (adapt/backend/App.py) — an alternative
@@ -102,6 +107,7 @@ export function PressureProvider({ children }: { children: React.ReactNode }) {
   const [useBle, setUseBle] = useState(false);
   const [bleStatus, setBleStatus] = useState<BleStatus | 'idle'>('idle');
   const [bleError, setBleError] = useState<string | null>(null);
+  const [bleNeedsSettings, setBleNeedsSettings] = useState(false);
   const [bleDevices, setBleDevices] = useState<DiscoveredDevice[]>([]);
   const [useBridge, setUseBridge] = useState(false);
   const [bridgeStatus, setBridgeStatus] = useState<BridgeStatus | null>(null);
@@ -199,11 +205,12 @@ export function PressureProvider({ children }: { children: React.ReactNode }) {
 
   // ---- BLE connection status ----
   useEffect(() => {
-    if (!useBle) { setBleStatus('idle'); setBleError(null); setBleDevices([]); return; }
+    if (!useBle) { setBleStatus('idle'); setBleError(null); setBleNeedsSettings(false); setBleDevices([]); return; }
     const offStatus = bleSource.onStatusChange(setBleStatus);
     const offError = bleSource.onError(setBleError);
+    const offNeedsSettings = bleSource.onNeedsSettings(setBleNeedsSettings);
     const offDevices = bleSource.onDeviceList(setBleDevices);
-    return () => { offStatus(); offError(); offDevices(); };
+    return () => { offStatus(); offError(); offNeedsSettings(); offDevices(); };
   }, [useBle, bleSource]);
 
   // ---- Bridge connection status ----
@@ -292,12 +299,12 @@ export function PressureProvider({ children }: { children: React.ReactNode }) {
 
   const deviceApi = useMemo<DeviceApi>(
     () => ({
-      useBle, bleStatus, toggleBle, bleError, bleDevices, retryBle,
+      useBle, bleStatus, toggleBle, bleError, bleNeedsSettings, bleDevices, retryBle,
       useBridge, bridgeStatus, connectBridge, disconnectBridge,
       hasZeroCalibration, zeroCalibrate, clearZeroCalibration,
       kalman, setKalman, resetKalman,
     }),
-    [useBle, bleStatus, toggleBle, bleError, bleDevices, retryBle,
+    [useBle, bleStatus, toggleBle, bleError, bleNeedsSettings, bleDevices, retryBle,
       useBridge, bridgeStatus, connectBridge, disconnectBridge,
       hasZeroCalibration, zeroCalibrate, clearZeroCalibration,
       kalman, setKalman, resetKalman],

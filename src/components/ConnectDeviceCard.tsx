@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, Pressable, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, Pressable, ActivityIndicator, Linking } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { Panel, Dot } from './ui';
 import { useDevice } from '@/pressure/PressureProvider';
@@ -23,6 +23,11 @@ export function ConnectDeviceCard() {
   const connected = device.useBle && device.bleStatus === 'connected';
   const connecting = device.useBle && device.bleStatus === 'scanning';
   const failed = device.useBle && device.bleStatus === 'fallback';
+  // Retrying a genuinely-denied Bluetooth permission just repeats the same
+  // timeout forever — iOS never shows that system prompt a second time.
+  // The only real fix is Settings, so this state gets its own button
+  // rather than "Tap to Try Again" quietly doing nothing useful.
+  const needsSettings = failed && device.bleNeedsSettings;
   const onBridge = device.useBridge;
   const onSimulator = !device.useBle && !device.useBridge;
 
@@ -30,9 +35,11 @@ export function ConnectDeviceCard() {
     ? 'AVA Fit Connected'
     : connecting
       ? 'Connecting…'
-      : failed
-        ? 'Tap to Try Again'
-        : 'Connect Your AVA Fit';
+      : needsSettings
+        ? 'Open Settings'
+        : failed
+          ? 'Tap to Try Again'
+          : 'Connect Your AVA Fit';
 
   const dotColor = connected ? color.green : connecting ? color.amber : failed ? color.red : color.textFaint;
 
@@ -40,14 +47,17 @@ export function ConnectDeviceCard() {
     ? 'Live pressure data is streaming from your socket.'
     : connecting
       ? 'Looking for your AVA Fit socket nearby…'
-      : failed
-        ? 'Couldn’t find your AVA Fit. Make sure it’s powered on and close by, then try again.'
-        : onBridge
-          ? 'Connected via bridge — using its test data.'
-          : 'Not connected yet — showing sample data for now.';
+      : needsSettings
+        ? 'AVA Fit doesn’t have Bluetooth access. Open Settings, turn it on for AVA Fit, then come back and try again.'
+        : failed
+          ? 'Couldn’t find your AVA Fit. Make sure it’s powered on and close by, then try again.'
+          : onBridge
+            ? 'Connected via bridge — using its test data.'
+            : 'Not connected yet — showing sample data for now.';
 
   const onPressMain = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    if (needsSettings) { Linking.openSettings(); return; }
     if (onBridge) device.disconnectBridge();
     if (device.useBle) {
       if (failed) device.retryBle();
@@ -72,7 +82,17 @@ export function ConnectDeviceCard() {
         <Text style={[styles.mainLabel, connected && styles.mainLabelConnected]}>{label}</Text>
       </Pressable>
 
-      <Text style={styles.detail} numberOfLines={2}>{detail}</Text>
+      <Text style={styles.detail} numberOfLines={3}>{detail}</Text>
+
+      {needsSettings && (
+        <Pressable
+          onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); device.retryBle(); }}
+          style={styles.retryLink}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        >
+          <Text style={styles.retryLinkText}>Already turned it on? Try Again</Text>
+        </Pressable>
+      )}
 
       <Pressable
         onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setAdvancedOpen((v) => !v); }}
@@ -133,6 +153,8 @@ const styles = StyleSheet.create({
   mainLabel: { fontFamily: font.monoMed, fontSize: 13, letterSpacing: 0.5, color: color.text },
   mainLabelConnected: { color: color.green },
   detail: { fontFamily: font.mono, fontSize: 11, color: color.textFaint, marginTop: space.sm, lineHeight: 16, textAlign: 'center' },
+  retryLink: { alignSelf: 'center', marginTop: space.sm, paddingVertical: 4 },
+  retryLinkText: { fontFamily: font.monoMed, fontSize: 11, color: color.cyan, textDecorationLine: 'underline' },
   advancedToggle: { alignSelf: 'center', marginTop: space.sm, paddingVertical: 4 },
   advancedToggleText: { fontFamily: font.mono, fontSize: 9, letterSpacing: 1, color: color.textFaint },
   advancedPanel: { marginTop: space.sm, paddingTop: space.sm, borderTopWidth: 1, borderTopColor: color.line, flexDirection: 'row', gap: space.xs, flexWrap: 'wrap' },
