@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, ScrollView, StyleSheet, Alert, TouchableOpacity, Modal, TextInput, KeyboardAvoidingView, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
@@ -416,7 +416,22 @@ function KalmanStepper({ label, value, min, max, step, color: tint, onChange }: 
  * name, or before this screen existed at all). Wrapped in
  * KeyboardAvoidingView with `behavior: 'height'` on Android for the same
  * reason as the Care screen's edit sheets: `undefined` there is a no-op and
- * app.json's edgeToEdgeEnabled breaks the OS's own keyboard resize. */
+ * app.json's edgeToEdgeEnabled breaks the OS's own keyboard resize.
+ *
+ * Two real bugs fixed here after the first ship:
+ *  - `autoFocus` fired the instant the TextInput mounted, which is before
+ *    Modal's slide-in animation (~300ms) finishes. Focusing — and the
+ *    keyboard appearing — mid-transition made the pre-filled text not
+ *    actually paint on screen, so a user typing over what looked like an
+ *    empty box was really typing *after* the existing name, producing
+ *    "PatientAAmigj" instead of replacing it. Now focus() is called from
+ *    Modal's `onShow`, which only fires once presentation is complete.
+ *  - `selectTextOnFocus` is the actual fix for the append-vs-replace
+ *    failure mode itself: whatever text is already there gets selected on
+ *    focus, so the very first keystroke replaces it regardless of whether
+ *    the user could see it.
+ *  - Input was genuinely too small (14px text, 10px vertical padding) —
+ *    bumped both. */
 function RenameModal({ visible, value, onChangeText, onClose, onSave }: {
  visible: boolean;
  value: string;
@@ -424,19 +439,27 @@ function RenameModal({ visible, value, onChangeText, onClose, onSave }: {
  onClose: () => void;
  onSave: () => void;
 }) {
+ const inputRef = useRef<TextInput>(null);
  return (
- <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
+ <Modal
+ visible={visible}
+ animationType="slide"
+ transparent
+ onRequestClose={onClose}
+ onShow={() => inputRef.current?.focus()}
+ >
  <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
  <View style={styles.modalBackdrop}>
  <View style={styles.modalCard}>
  <Text style={styles.modalTitle}>Rename Profile</Text>
  <TextInput
+ ref={inputRef}
  value={value}
  onChangeText={onChangeText}
  placeholder="Patient name"
  placeholderTextColor={color.textFaint}
  style={[styles.newProfileInput, { marginTop: space.md }]}
- autoFocus
+ selectTextOnFocus
  onSubmitEditing={onSave}
  returnKeyType="done"
  />
@@ -491,14 +514,15 @@ const styles = StyleSheet.create({
  newProfileInput: {
  flex: 1,
  fontFamily: font.body,
- fontSize: 14,
+ fontSize: 16,
+ minHeight: 48,
  color: color.text,
  borderWidth: 1,
  borderColor: color.line,
  backgroundColor: color.panelDeep,
  borderRadius: radius.sm,
- paddingHorizontal: space.sm,
- paddingVertical: 10,
+ paddingHorizontal: space.md,
+ paddingVertical: 12,
  },
  newProfileBtnText: { fontFamily: font.monoMed, fontSize: 12, marginTop: 2 },
  input: { fontFamily: font.mono, fontSize: 13, color: color.text, borderWidth: 1, borderColor: color.line, backgroundColor: color.panelDeep, borderRadius: radius.sm, paddingHorizontal: space.sm, paddingVertical: 10 },
