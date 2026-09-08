@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, ScrollView, StyleSheet, Alert, TouchableOpacity, Modal } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, Alert, TouchableOpacity, Modal, TextInput, KeyboardAvoidingView, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { ScreenScaffold, Panel, Lbl, Btn, Row, StatTile, PressureGrid } from '@/components';
@@ -43,6 +43,8 @@ export default function SettingsScreen() {
  const [todayStats, setTodayStats] = useState({ count: 0, totalHours: 0 });
  const [showProfiles, setShowProfiles] = useState(false);
  const [newName, setNewName] = useState('');
+ const [renaming, setRenaming] = useState(false);
+ const [renameValue, setRenameValue] = useState('');
  const [showTouchId, setShowTouchId] = useState(false);
  const [importing, setImporting] = useState(false);
 
@@ -67,6 +69,20 @@ export default function SettingsScreen() {
  await createProfile(newName.trim());
  setNewName('');
  setShowProfiles(false);
+ };
+
+ const openRename = () => {
+ Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+ setRenameValue(activeProfile?.name ?? '');
+ setRenaming(true);
+ };
+
+ const handleRename = async () => {
+ const trimmed = renameValue.trim();
+ if (!trimmed) return;
+ await updateActiveProfile({ name: trimmed });
+ Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+ setRenaming(false);
  };
 
  const saveGrid = (r: number, c: number) => {
@@ -145,9 +161,12 @@ export default function SettingsScreen() {
  <Text style={styles.profileName}>{activeProfile?.name ?? 'No Profile'}</Text>
  <Text style={styles.profileId}>{activeProfile?.patient_id ?? ''}</Text>
  </View>
+ <View style={{ flexDirection: 'row', gap: space.xs }}>
+ <Btn tone="ghost" onPress={openRename}>Rename</Btn>
  <Btn tone="ghost" onPress={() => setShowProfiles(!showProfiles)}>
  {showProfiles ? 'Close' : 'Switch'}
  </Btn>
+ </View>
  </View>
  {showProfiles && (
  <View style={styles.profileList}>
@@ -162,15 +181,24 @@ export default function SettingsScreen() {
  </TouchableOpacity>
  ))}
  <View style={styles.newProfileRow}>
+ <Text style={styles.newProfileLabel}>New Profile</Text>
+ <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.sm, marginTop: 6 }}>
+ <TextInput
+ value={newName}
+ onChangeText={setNewName}
+ placeholder="Patient name"
+ placeholderTextColor={color.textFaint}
+ style={styles.newProfileInput}
+ onSubmitEditing={handleCreateProfile}
+ returnKeyType="done"
+ />
  <TouchableOpacity
- style={[styles.newProfileBtn, { borderColor: color.cyan + '40' }]}
+ style={[styles.newProfileBtn, { borderColor: color.cyan + '40', opacity: newName.trim() ? 1 : 0.4 }]}
  onPress={handleCreateProfile}
+ disabled={!newName.trim()}
  >
  <Text style={{ color: color.cyan, fontFamily: font.mono, fontSize: 18 }}>+</Text>
  </TouchableOpacity>
- <View style={{ flex: 1, marginLeft: space.sm }}>
- <Text style={styles.newProfileLabel}>New Profile</Text>
- <TouchableOpacity onPress={handleCreateProfile}><Text style={[styles.newProfileBtnText, { color: color.cyan }]}>Create new</Text></TouchableOpacity>
  </View>
  </View>
  </View>
@@ -330,6 +358,13 @@ export default function SettingsScreen() {
  </ScrollView>
 
  <TouchToIdentifyModal visible={showTouchId} onClose={() => setShowTouchId(false)} rows={grid.rows} cols={grid.cols} />
+ <RenameModal
+ visible={renaming}
+ value={renameValue}
+ onChangeText={setRenameValue}
+ onClose={() => setRenaming(false)}
+ onSave={handleRename}
+ />
  </ScreenScaffold>
  );
 }
@@ -376,6 +411,46 @@ function KalmanStepper({ label, value, min, max, step, color: tint, onChange }: 
  );
 }
 
+/** Rename the active profile — this is the direct fix for an account stuck
+ * showing the placeholder "Patient" (created before sign-up asked for a
+ * name, or before this screen existed at all). Wrapped in
+ * KeyboardAvoidingView with `behavior: 'height'` on Android for the same
+ * reason as the Care screen's edit sheets: `undefined` there is a no-op and
+ * app.json's edgeToEdgeEnabled breaks the OS's own keyboard resize. */
+function RenameModal({ visible, value, onChangeText, onClose, onSave }: {
+ visible: boolean;
+ value: string;
+ onChangeText: (v: string) => void;
+ onClose: () => void;
+ onSave: () => void;
+}) {
+ return (
+ <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
+ <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+ <View style={styles.modalBackdrop}>
+ <View style={styles.modalCard}>
+ <Text style={styles.modalTitle}>Rename Profile</Text>
+ <TextInput
+ value={value}
+ onChangeText={onChangeText}
+ placeholder="Patient name"
+ placeholderTextColor={color.textFaint}
+ style={[styles.newProfileInput, { marginTop: space.md }]}
+ autoFocus
+ onSubmitEditing={onSave}
+ returnKeyType="done"
+ />
+ <View style={{ flexDirection: 'row', gap: space.sm, marginTop: space.lg }}>
+ <Btn tone="ghost" onPress={onClose} style={{ flex: 1 }}>Cancel</Btn>
+ <Btn tone="cyan" onPress={onSave} style={{ flex: 1 }}>Save</Btn>
+ </View>
+ </View>
+ </View>
+ </KeyboardAvoidingView>
+ </Modal>
+ );
+}
+
 /** Live verification tool: shows the real-time sensor grid so a clinician can
  * press each physical pad and confirm the matching cell lights up on screen.
  * Uses the same live reading everywhere else in the app — not simulated. */
@@ -413,6 +488,18 @@ const styles = StyleSheet.create({
  newProfileRow: { flexDirection: 'row', alignItems: 'center', marginTop: space.sm },
  newProfileBtn: { width: 40, height: 40, borderRadius: 20, borderWidth: 1, justifyContent: 'center', alignItems: 'center' },
  newProfileLabel: { fontFamily: font.mono, fontSize: 10, color: color.textFaint, letterSpacing: 0.5 },
+ newProfileInput: {
+ flex: 1,
+ fontFamily: font.body,
+ fontSize: 14,
+ color: color.text,
+ borderWidth: 1,
+ borderColor: color.line,
+ backgroundColor: color.panelDeep,
+ borderRadius: radius.sm,
+ paddingHorizontal: space.sm,
+ paddingVertical: 10,
+ },
  newProfileBtnText: { fontFamily: font.monoMed, fontSize: 12, marginTop: 2 },
  input: { fontFamily: font.mono, fontSize: 13, color: color.text, borderWidth: 1, borderColor: color.line, backgroundColor: color.panelDeep, borderRadius: radius.sm, paddingHorizontal: space.sm, paddingVertical: 10 },
  toggleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: space.sm },
