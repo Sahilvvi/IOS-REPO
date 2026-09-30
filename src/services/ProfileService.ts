@@ -5,7 +5,8 @@ import * as SecureStore from 'expo-secure-store';
 import * as FileSystem from 'expo-file-system/legacy';
 import { pushProfile, deleteProfileCloud } from './CloudSyncService';
 
-const PROFILE_KEY = 'ava_fit_profiles';
+import { profileKey, claimLegacyData } from './storageScope';
+
 const SOCKET_DIR = `${FileSystem.documentDirectory}sockets/`;
 
 export interface ProfileCalibration {
@@ -69,7 +70,8 @@ export function createProfileData(name: string, patient_id: string): Profile {
 
 export async function listProfiles(): Promise<Profile[]> {
  try {
- const raw = await SecureStore.getItemAsync(PROFILE_KEY);
+ await claimLegacyData();
+ const raw = await SecureStore.getItemAsync(profileKey());
  if (!raw) return [];
  return JSON.parse(raw);
  } catch {
@@ -86,7 +88,7 @@ export async function saveProfile(profile: Profile): Promise<void> {
  profiles.push(profile);
  }
  try {
- await SecureStore.setItemAsync(PROFILE_KEY, JSON.stringify(profiles));
+ await SecureStore.setItemAsync(profileKey(), JSON.stringify(profiles));
  } catch (e) {
  // expo-secure-store's web shim is incomplete on some SDK/browser combos
  // (missing native keychain, obviously) — on-device iOS/Android this is
@@ -101,7 +103,7 @@ export async function deleteProfile(id: string): Promise<void> {
  const profiles = await listProfiles();
  const filtered = profiles.filter(p => p.id !== id);
  try {
- await SecureStore.setItemAsync(PROFILE_KEY, JSON.stringify(filtered));
+ await SecureStore.setItemAsync(profileKey(), JSON.stringify(filtered));
  } catch (e) {
  console.warn('[ProfileService] deleteProfile failed to persist:', e);
  }

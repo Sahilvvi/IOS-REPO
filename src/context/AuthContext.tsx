@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import { supabase, isSupabaseConfigured } from '@/services/supabaseClient';
+import { setStorageScope } from '@/services/storageScope';
 import { signIn as authSignIn, signUp as authSignUp, signOut as authSignOut } from '@/services/AuthService';
 
 interface AuthState {
@@ -24,6 +25,10 @@ const AuthContext = createContext<AuthState>({
 export function AuthProvider({ children }: { children: React.ReactNode }) {
  const [session, setSession] = useState<Session | null>(null);
  const [loading, setLoading] = useState(true);
+
+ // Set during render (not in an effect) so children's effects, which run
+ // after this render, always read/write the signed-in account's storage.
+ setStorageScope(session?.user?.id);
 
  useEffect(() => {
  if (!isSupabaseConfigured) {

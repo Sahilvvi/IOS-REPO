@@ -10,7 +10,8 @@
 import * as FileSystem from 'expo-file-system/legacy';
 import { Platform } from 'react-native';
 
-const SESSION_DIR = `${FileSystem.documentDirectory}sessions/`;
+import { sessionDir, claimLegacyData } from '@/services/storageScope';
+
 const SAMPLE_HZ = 10;
 
 let sessionFile: string | null = null;
@@ -21,16 +22,27 @@ let sessionId = '';
 let rowCount = 0;
 let active = false;
 let lastRecordMs = 0;
+// Folder this session writes to, fixed at start so an account switch
+// mid-session can't split one recording across two accounts' folders.
+let dirPath = '';
+// expo-file-system has no append, so each flush is read-modify-write. Flushes
+// are chained so two can never interleave and clobber each other.
+let writeChain: Promise<void> = Promise.resolve();
+let fileStarted = false;
 
 async function ensureDir() {
  try {
- await FileSystem.makeDirectoryAsync(SESSION_DIR, { intermediates: true });
+ await FileSystem.makeDirectoryAsync(dirPath, { intermediates: true });
  } catch {}
 }
 
 export async function startSession(sid: string = 'unknown', notes: string = ''): Promise<boolean> {
  if (active) return false;
+ await claimLegacyData();
+ dirPath = sessionDir();
  await ensureDir();
+ fileStarted = false;
+ writeChain = Promise.resolve();
 
  subjectId = sid;
  sessionId = `${Date.now()}_${sid}`;
@@ -86,31 +98,45 @@ export function record(pressure: number[], imu: Record<string, any>, source: str
  rowCount++;
 
  if (rowCount % 50 === 0) {
- flushSync();
+ flush();
  }
 }
 
-function flushSync() {
- if (!active || !sessionWriter.length) return;
- const content = sessionWriter.join('\n');
- const path = `${SESSION_DIR}session_${sessionId}.csv`;
-
- FileSystem.writeAsStringAsync(path, content, { encoding: FileSystem.EncodingType.UTF8 }).catch(() => {});
+/** Queue the buffered rows to be appended to this session's CSV. The returned
+ * promise resolves once every queued write has finished. */
+function flush(): Promise<void> {
+ if (sessionWriter.length) {
+ const chunk = sessionWriter.join('\n');
  sessionWriter = [];
+ const path = `${dirPath}session_${sessionId}.csv`;
+ const append = fileStarted;
+ fileStarted = true;
+ writeChain = writeChain.then(async () => {
+ try {
+ const prev = append ? `${await FileSystem.readAsStringAsync(path)}\n` : '';
+ await FileSystem.writeAsStringAsync(path, prev + chunk, { encoding: FileSystem.EncodingType.UTF8 });
+ } catch (e) {
+ console.warn('[sessionLogger] flush failed:', e);
+ }
+ });
+ }
+ return writeChain;
 }
 
 export async function endSession(endNotes: string = ''): Promise<string | null> {
  if (!active) return null;
  active = false;
 
- flushSync();
+ // Write the final partial chunk too - short sessions (<50 rows) used to
+ // produce no file at all because this flush was skipped once active=false.
+ await flush();
 
  const duration_s = (Date.now() - sessionStartMs) / 1000;
- const path = `${SESSION_DIR}session_${sessionId}.csv`;
+ const path = `${dirPath}session_${sessionId}.csv`;
 
  try {
  const entry = `${sessionId},${subjectId},${sessionStartMs},${Date.now()},${duration_s.toFixed(1)},${rowCount},${path},${endNotes}\n`;
- const indexPath = `${SESSION_DIR}_index.csv`;
+ const indexPath = `${dirPath}_index.csv`;
  // expo-file-system has never had an appendStringAsync — read-modify-write
  // the whole index instead. Session indexes stay small (one line per wear
  // session), so this is cheap.

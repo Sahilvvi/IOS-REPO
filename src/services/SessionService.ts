@@ -7,8 +7,9 @@
 // See sessionLogger.ts for why this is the /legacy subpath.
 import * as FileSystem from 'expo-file-system/legacy';
 
-const SESSION_DIR = `${FileSystem.documentDirectory}sessions/`;
-const INDEX_PATH = `${SESSION_DIR}_index.csv`;
+import { sessionDir, claimLegacyData } from './storageScope';
+
+const indexPath = () => `${sessionDir()}_index.csv`;
 
 export interface SessionMeta {
  id: string;
@@ -27,9 +28,10 @@ export interface SessionMeta {
  */
 export async function listSessions(): Promise<SessionMeta[]> {
  try {
- const exists = await FileSystem.getInfoAsync(INDEX_PATH);
+ await claimLegacyData();
+ const exists = await FileSystem.getInfoAsync(indexPath());
  if (!exists.exists) return [];
- const raw = await FileSystem.readAsStringAsync(INDEX_PATH);
+ const raw = await FileSystem.readAsStringAsync(indexPath());
  return parseIndex(raw);
  } catch {
  return [];
@@ -61,7 +63,9 @@ function parseIndex(raw: string): SessionMeta[] {
  endMs: Number(endMsStr) || 0,
  durationSec: Number(durationStr) || 0,
  rows: Number(rowsStr) || 0,
- file: file || '',
+ // The index stores an absolute URI from when the session was recorded;
+ // re-root it in the current account's folder so moved/restored data resolves.
+ file: file ? `${sessionDir()}${file.split('/').pop()}` : '',
  notes,
  };
 
@@ -155,11 +159,11 @@ export async function deleteSession(sessionId: string): Promise<boolean> {
 
  // Rewrite the index without this entry
  try {
- const raw = await FileSystem.readAsStringAsync(INDEX_PATH);
+ const raw = await FileSystem.readAsStringAsync(indexPath());
  const lines = raw.split('\n');
  const kept = lines.filter(l => !l.startsWith(`${sessionId},`));
  const header = 'session_id,subject_id,start_ms,end_ms,duration_s,rows,file,notes\n';
- await FileSystem.writeAsStringAsync(INDEX_PATH, header + kept.join('\n'));
+ await FileSystem.writeAsStringAsync(indexPath(), header + kept.join('\n'));
  return true;
  } catch {
  return false;
