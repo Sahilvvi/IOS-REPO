@@ -4,6 +4,8 @@ import { StatusBar } from 'expo-status-bar';
 import { useFonts } from 'expo-font';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect } from 'react';
+import { AppState } from 'react-native';
+import { syncPending } from '@/services/SyncService';
 import { PressureProvider } from '@/pressure/PressureProvider';
 import { ProfileProvider } from '@/context/ProfileContext';
 import { AuthProvider, useAuth } from '@/context/AuthContext';
@@ -57,6 +59,16 @@ function Gate() {
  useEffect(() => {
  if (ready) SplashScreen.hideAsync();
  }, [ready]);
+
+ // Backfill anything that never reached Supabase: on sign-in/app start, and
+ // again every time the app returns to the foreground.
+ const userId = session?.user?.id;
+ useEffect(() => {
+ if (!userId) return;
+ syncPending();
+ const sub = AppState.addEventListener('change', s => { if (s === 'active') syncPending(); });
+ return () => sub.remove();
+ }, [userId]);
 
  if (!ready) return <BootSplash />;
 

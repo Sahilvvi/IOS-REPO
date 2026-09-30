@@ -9,7 +9,7 @@ import { FitRing, ConnectDeviceCard, GearIcon } from '@/components';
 import { Panel, Row, StatTile, Bar, Btn, Lbl, Body, Sub, ScreenScaffold, Dot } from '@/components/ui';
 import { color, font, space, radius } from '@/theme/tokens';
 import { getTodaySessionStats, listSessions, formatDate, formatDuration, SessionMeta } from '@/services/SessionService';
-import { pushSession } from '@/services/CloudSyncService';
+import { syncPending } from '@/services/SyncService';
 
 export default function TodayScreen() {
  const reading = useFitReading();
@@ -62,11 +62,9 @@ export default function TodayScreen() {
  try {
  if (session.active) {
  await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
- const sid = await session.stopSession();
- if (sid && activeProfile) {
- const meta = (await listSessions()).find(s => s.id === sid);
- if (meta) pushSession(meta, activeProfile.id);
- }
+ await session.stopSession();
+ // Reconciles rather than one-shot pushing, so a failed upload is retried.
+ syncPending();
  await refreshSessions();
  } else {
  await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);

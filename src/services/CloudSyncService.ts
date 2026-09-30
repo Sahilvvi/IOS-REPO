@@ -30,10 +30,13 @@ async function currentUserId(): Promise<string | null> {
  return data.user?.id ?? null;
 }
 
-export async function pushProfile(profile: Profile): Promise<void> {
+/** Returns null on success (or when there is nothing to do because nobody is
+ * signed in), otherwise the error message so callers like SyncService can
+ * retry instead of losing the write. */
+export async function pushProfile(profile: Profile): Promise<string | null> {
  try {
  const ownerId = await currentUserId();
- if (!ownerId) return;
+ if (!ownerId) return 'not signed in';
  const { error } = await supabase.from('patients').upsert({
  id: patientUuid(profile.id),
  owner_id: ownerId,
@@ -52,9 +55,14 @@ export async function pushProfile(profile: Profile): Promise<void> {
  scan_timeout: profile.device.scan_timeout,
  retry_delay: profile.device.retry_delay,
  });
- if (error) console.warn('[CloudSync] pushProfile failed:', error.message);
+ if (error) {
+ console.warn('[CloudSync] pushProfile failed:', error.message);
+ return error.message;
+ }
+ return null;
  } catch (e) {
  console.warn('[CloudSync] pushProfile error:', e);
+ return String(e);
  }
 }
 
@@ -68,10 +76,10 @@ export async function deleteProfileCloud(profileId: string): Promise<void> {
  }
 }
 
-export async function pushSession(meta: SessionMeta, patientLocalId: string): Promise<void> {
+export async function pushSession(meta: SessionMeta, patientLocalId: string): Promise<string | null> {
  try {
  const ownerId = await currentUserId();
- if (!ownerId) return;
+ if (!ownerId) return 'not signed in';
  const { error } = await supabase.from('sessions').insert({
  patient_id: patientUuid(patientLocalId),
  owner_id: ownerId,
@@ -83,9 +91,32 @@ export async function pushSession(meta: SessionMeta, patientLocalId: string): Pr
  row_count: meta.rows,
  notes: meta.notes,
  });
- if (error) console.warn('[CloudSync] pushSession failed:', error.message);
+ if (error) {
+ console.warn('[CloudSync] pushSession failed:', error.message);
+ return error.message;
+ }
+ return null;
  } catch (e) {
  console.warn('[CloudSync] pushSession error:', e);
+ return String(e);
+ }
+}
+
+/** session_code values this user already has in the cloud. `sessions` has no
+ * unique constraint on session_code, so callers dedupe against this list. */
+export async function listCloudSessionCodes(): Promise<Set<string> | null> {
+ try {
+ const ownerId = await currentUserId();
+ if (!ownerId) return null;
+ const { data, error } = await supabase.from('sessions').select('session_code').eq('owner_id', ownerId);
+ if (error) {
+ console.warn('[CloudSync] listCloudSessionCodes failed:', error.message);
+ return null;
+ }
+ return new Set((data ?? []).map(r => r.session_code as string));
+ } catch (e) {
+ console.warn('[CloudSync] listCloudSessionCodes error:', e);
+ return null;
  }
 }
 
