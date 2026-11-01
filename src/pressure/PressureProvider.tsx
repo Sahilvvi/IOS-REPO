@@ -9,6 +9,7 @@ import { HttpPressureSource, BridgeStatus } from './HttpPressureSource';
 import { KalmanTuning } from './kalmanFilter';
 import { useProfile } from '@/context/ProfileContext';
 import * as sessionLogger from './sessionLogger';
+import { chatbotUplink } from '@/services/ChatbotUplink';
 
 export interface ClinicalReading {
   available: boolean;
@@ -130,6 +131,11 @@ export function PressureProvider({ children }: { children: React.ReactNode }) {
   const [kalman, setKalmanState] = useState<KalmanTuning>(DEFAULT_KALMAN);
 
   const lastRawFrame = useRef<number[]>([...BASELINE_KPA]);
+  // Only 'connected' means frames come from the real sensor: in 'scanning' and
+  // 'fallback' the BLE source hands out simulated frames, which must never be
+  // sent to the chatbot. Read in the frame callback via a ref for the same reason
+  // as zeroOffsetsRef below.
+  const bleStatusRef = useRef<BleStatus | 'idle'>('idle');
   const zeroOffsets = activeProfile?.calibration?.zero_offsets ?? null;
   const hasZeroCalibration = Array.isArray(zeroOffsets) && zeroOffsets.length === SENSOR_COUNT;
   // Read inside the frame-subscription callback via a ref, not a hook dep —
@@ -171,6 +177,7 @@ export function PressureProvider({ children }: { children: React.ReactNode }) {
     const sub = active.subscribe((rawFrame) => {
       if (cancelled) return;
       lastRawFrame.current = [...rawFrame];
+      if (active === bleSource && bleStatusRef.current === 'connected') chatbotUplink.add(rawFrame);
 
       const offsets = zeroOffsetsRef.current;
       const corrected = offsets
@@ -201,12 +208,18 @@ export function PressureProvider({ children }: { children: React.ReactNode }) {
       cancelled = true;
       sub();
     };
-  }, [active, bleRetryNonce]);
+  }, [active, bleSource, bleRetryNonce]);
+
+  // ---- Live readings to the chatbot (real hardware only; see ChatbotUplink) ----
+  useEffect(() => {
+    chatbotUplink.start();
+    return () => chatbotUplink.stop();
+  }, []);
 
   // ---- BLE connection status ----
   useEffect(() => {
-    if (!useBle) { setBleStatus('idle'); setBleError(null); setBleNeedsSettings(false); setBleDevices([]); return; }
-    const offStatus = bleSource.onStatusChange(setBleStatus);
+    if (!useBle) { bleStatusRef.current = 'idle'; setBleStatus('idle'); setBleError(null); setBleNeedsSettings(false); setBleDevices([]); return; }
+    const offStatus = bleSource.onStatusChange((s) => { bleStatusRef.current = s; setBleStatus(s); });
     const offError = bleSource.onError(setBleError);
     const offNeedsSettings = bleSource.onNeedsSettings(setBleNeedsSettings);
     const offDevices = bleSource.onDeviceList(setBleDevices);
