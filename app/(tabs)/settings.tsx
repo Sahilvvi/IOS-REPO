@@ -9,6 +9,7 @@ import { listSessions, getTodaySessionStats } from '@/services/SessionService';
 import { useProfile } from '@/context/ProfileContext';
 import { useAuth } from '@/context/AuthContext';
 import { importSocketFile, clearSocketFile, type Profile } from '@/services/ProfileService';
+import { chatbotUplink, type LinkResult } from '@/services/ChatbotUplink';
 import type { MappingMethod } from '@/services/SensorMapper';
 
 // Guarded lazy require — a native module that fails to link should degrade
@@ -47,8 +48,19 @@ export default function SettingsScreen() {
  const [renameValue, setRenameValue] = useState('');
  const [showTouchId, setShowTouchId] = useState(false);
  const [importing, setImporting] = useState(false);
+ // undefined = still checking; null = no clinic record linked to this account
+ const [clinicLink, setClinicLink] = useState<LinkResult | null | undefined>(undefined);
+ const [linking, setLinking] = useState(false);
 
  useEffect(() => { loadTodayStats(); }, []);
+
+ useEffect(() => {
+ if (!session) { setClinicLink(null); return; }
+ let cancelled = false;
+ setClinicLink(undefined);
+ chatbotUplink.linkedPatient().then(r => { if (!cancelled) setClinicLink(r); });
+ return () => { cancelled = true; };
+ }, [session?.user.id]);
 
  const loadTodayStats = async () => {
  const stats = await getTodaySessionStats();
@@ -222,6 +234,31 @@ export default function SettingsScreen() {
  )}
  </Section>
 
+ {/* Clinic record: which patient the live readings and the chatbot belong to */}
+ {configured && session && (
+ <Section>
+ <Lbl>Clinic Record</Lbl>
+ {clinicLink === undefined ? (
+ <Text style={styles.hint}>Checking… (the server can take up to a minute to wake up)</Text>
+ ) : clinicLink?.ok ? (
+ <>
+ <Text style={styles.toggleLabel}>{clinicLink.code}</Text>
+ <Text style={styles.hint}>Live readings go to {clinicLink.name}'s record, so the AVA Fit assistant can answer about them.</Text>
+ </>
+ ) : (
+ <>
+ <Text style={styles.hint}>
+ {clinicLink === null
+ ? 'Not linked yet. Link your clinic patient ID so the AVA Fit assistant can see your live readings.'
+ : clinicLink.error}
+ </Text>
+ <View style={{ height: space.sm }} />
+ <Btn tone="outline" onPress={() => setLinking(true)}>Link Patient ID</Btn>
+ </>
+ )}
+ </Section>
+ )}
+
  {/* Data Source */}
  <Section>
  <Lbl>Data Source</Lbl>
@@ -362,6 +399,11 @@ export default function SettingsScreen() {
  </Section>
  </ScrollView>
 
+ <LinkPatientModal
+ visible={linking}
+ onClose={() => setLinking(false)}
+ onLinked={r => { setClinicLink(r); setLinking(false); }}
+ />
  <TouchToIdentifyModal visible={showTouchId} onClose={() => setShowTouchId(false)} rows={grid.rows} cols={grid.cols} />
  <RenameModal
  visible={renaming}
@@ -471,6 +513,86 @@ function RenameModal({ visible, value, onChangeText, onClose, onSave }: {
  <View style={{ flexDirection: 'row', gap: space.sm, marginTop: space.lg }}>
  <Btn tone="ghost" onPress={onClose} style={{ flex: 1 }}>Cancel</Btn>
  <Btn tone="cyan" onPress={onSave} style={{ flex: 1 }}>Save</Btn>
+ </View>
+ </View>
+ </View>
+ </KeyboardAvoidingView>
+ </Modal>
+ );
+}
+
+/** Links this account to a clinic patient record with the patient ID and password the
+ * clinic gave for the AVA Fit assistant. The server checks the password, so nobody can
+ * attach their phone to someone else's record. */
+function LinkPatientModal({ visible, onClose, onLinked }: {
+ visible: boolean;
+ onClose: () => void;
+ onLinked: (r: LinkResult) => void;
+}) {
+ const [code, setCode] = useState('');
+ const [password, setPassword] = useState('');
+ const [busy, setBusy] = useState(false);
+ const [error, setError] = useState<string | null>(null);
+ const codeRef = useRef<TextInput>(null);
+ const passwordRef = useRef<TextInput>(null);
+
+ const close = () => { if (busy) return; setPassword(''); setError(null); onClose(); };
+
+ const submit = async () => {
+ if (busy || !code.trim() || !password) return;
+ setBusy(true);
+ setError(null);
+ const r = await chatbotUplink.linkPatient(code, password);
+ setBusy(false);
+ if (r.ok) {
+ Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+ setPassword('');
+ onLinked(r);
+ } else {
+ Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+ setError(r.error);
+ }
+ };
+
+ return (
+ <Modal visible={visible} animationType="slide" transparent onRequestClose={close} onShow={() => codeRef.current?.focus()}>
+ <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+ <View style={styles.modalBackdrop}>
+ <View style={styles.modalCard}>
+ <Text style={styles.modalTitle}>Link Patient ID</Text>
+ <Text style={styles.modalHint}>Enter the patient ID (for example QP225) and password your clinic gave you for the AVA Fit assistant.</Text>
+ <TextInput
+ ref={codeRef}
+ value={code}
+ onChangeText={setCode}
+ placeholder="Patient ID"
+ placeholderTextColor={color.textFaint}
+ autoCapitalize="characters"
+ autoCorrect={false}
+ style={[styles.newProfileInput, { marginTop: space.md }]}
+ onSubmitEditing={() => passwordRef.current?.focus()}
+ returnKeyType="next"
+ editable={!busy}
+ />
+ <TextInput
+ ref={passwordRef}
+ value={password}
+ onChangeText={setPassword}
+ placeholder="Password"
+ placeholderTextColor={color.textFaint}
+ secureTextEntry
+ autoCapitalize="none"
+ autoCorrect={false}
+ style={[styles.newProfileInput, { marginTop: space.sm }]}
+ onSubmitEditing={submit}
+ returnKeyType="done"
+ editable={!busy}
+ />
+ {busy && <Text style={styles.hint}>Linking… this can take up to a minute if the server was asleep.</Text>}
+ {error && <Text style={[styles.hint, { color: color.red }]}>{error}</Text>}
+ <View style={{ flexDirection: 'row', gap: space.sm, marginTop: space.lg }}>
+ <Btn tone="ghost" onPress={close} style={{ flex: 1 }}>Cancel</Btn>
+ <Btn tone="cyan" onPress={submit} style={{ flex: 1 }}>{busy ? 'Linking…' : 'Link'}</Btn>
  </View>
  </View>
  </View>

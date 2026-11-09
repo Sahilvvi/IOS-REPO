@@ -52,6 +52,10 @@ export const supabase = createClient(
  {
  auth: {
  storage: safeStorage,
+ // supabase-js names the saved sign-in after the URL's first label, so moving to a
+ // custom domain (the fix for networks that block supabase.co) would sign everyone
+ // out. Pinning the original name keeps them signed in across that switch.
+ storageKey: 'sb-pzwsehbrstvjkqpxwyod-auth-token',
  autoRefreshToken: !isServerBundle,
  persistSession: !isServerBundle,
  detectSessionInUrl: false,

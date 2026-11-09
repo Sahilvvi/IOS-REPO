@@ -19,14 +19,19 @@ const MAX_BATCH = 400; // the server's limit is 500 per request
 const MAX_QUEUE = 1500; // about 2.5 minutes at 10 Hz
 const RETRY_UNLINKED_MS = 60_000;
 const REQUEST_TIMEOUT_MS = 8000;
+// The free Render plan sleeps when idle and takes up to a minute to wake, which a
+// person waiting on the link screen must be allowed to sit through.
+const INTERACTIVE_TIMEOUT_MS = 75_000;
 
 export type UplinkStatus = 'idle' | 'sending' | 'not-linked' | 'error';
 
+export type LinkResult = { ok: true; code: string; name: string } | { ok: false; error: string };
+
 type Sample = { ts: number; pressure: number[] };
 
-async function call(path: string, token: string, body?: unknown): Promise<Response> {
+async function call(path: string, token: string, body?: unknown, timeoutMs = REQUEST_TIMEOUT_MS): Promise<Response> {
   const ctl = new AbortController();
-  const timer = setTimeout(() => ctl.abort(), REQUEST_TIMEOUT_MS);
+  const timer = setTimeout(() => ctl.abort(), timeoutMs);
   try {
     return await fetch(BASE_URL + path, {
       method: body === undefined ? 'GET' : 'POST',
@@ -64,6 +69,40 @@ class ChatbotUplink {
     this.timer = null;
     this.queue = [];
     this.status = 'idle';
+  }
+
+  /** The clinic record this account sends readings for, or null if none is linked. */
+  async linkedPatient(): Promise<LinkResult | null> {
+    const { data } = await supabase.auth.getSession();
+    const token = data.session?.access_token;
+    if (!token) return { ok: false, error: 'Sign in first.' };
+    try {
+      const res = await call('/phone/me', token, undefined, INTERACTIVE_TIMEOUT_MS);
+      if (res.status === 404) return null;
+      if (!res.ok) return { ok: false, error: `Server error (${res.status}).` };
+      const me = await res.json();
+      return { ok: true, code: me.patient_code, name: me.name };
+    } catch {
+      return { ok: false, error: 'Could not reach the AVA Fit server. Check your internet connection.' };
+    }
+  }
+
+  /** Links this account to a clinic patient record, proven with that patient's chatbot password. */
+  async linkPatient(patientCode: string, password: string): Promise<LinkResult> {
+    const { data } = await supabase.auth.getSession();
+    const token = data.session?.access_token;
+    if (!token) return { ok: false, error: 'Sign in first.' };
+    try {
+      const res = await call('/phone/link', token, { patient_id: patientCode.trim(), password }, INTERACTIVE_TIMEOUT_MS);
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) return { ok: false, error: body.detail ?? `Server error (${res.status}).` };
+      // Start sending straight away instead of waiting out the "not linked" back-off.
+      this.linked = null;
+      this.unlinkedUntil = null;
+      return { ok: true, code: body.patient_code, name: body.name };
+    } catch {
+      return { ok: false, error: 'Could not reach the AVA Fit server. Check your internet connection.' };
+    }
   }
 
   private async flush() {
