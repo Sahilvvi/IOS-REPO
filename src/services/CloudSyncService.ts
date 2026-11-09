@@ -102,6 +102,30 @@ export async function pushSession(meta: SessionMeta, patientLocalId: string): Pr
  }
 }
 
+export interface LiveReading {
+ recorded_at: string;
+ pressure: number[];
+}
+
+/** Returns null on success, otherwise the error message so LiveCloudUplink can
+ * keep the batch and retry. */
+export async function pushLiveReadings(readings: LiveReading[], patientLocalId: string, ownerId: string): Promise<string | null> {
+ try {
+ const patientId = patientUuid(patientLocalId);
+ const { error } = await supabase.from('live_readings').insert(
+ readings.map(r => ({ ...r, owner_id: ownerId, patient_id: patientId, source: 'ble' })),
+ );
+ if (error) {
+ console.warn('[CloudSync] pushLiveReadings failed:', error.message);
+ return error.message;
+ }
+ return null;
+ } catch (e) {
+ console.warn('[CloudSync] pushLiveReadings error:', e);
+ return String(e);
+ }
+}
+
 /** session_code values this user already has in the cloud. `sessions` has no
  * unique constraint on session_code, so callers dedupe against this list. */
 export async function listCloudSessionCodes(): Promise<Set<string> | null> {

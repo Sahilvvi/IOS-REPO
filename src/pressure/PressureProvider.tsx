@@ -10,6 +10,7 @@ import { KalmanTuning } from './kalmanFilter';
 import { useProfile } from '@/context/ProfileContext';
 import * as sessionLogger from './sessionLogger';
 import { chatbotUplink } from '@/services/ChatbotUplink';
+import { liveCloudUplink } from '@/services/LiveCloudUplink';
 
 export interface ClinicalReading {
   available: boolean;
@@ -184,6 +185,8 @@ export function PressureProvider({ children }: { children: React.ReactNode }) {
         ? rawFrame.map((v, i) => Math.max(0, v - (offsets[i] ?? 0)))
         : rawFrame;
 
+      if (active === bleSource && bleStatusRef.current === 'connected') liveCloudUplink.add(corrected);
+
       setFrame([...corrected]);
 
       if (sessionLogger.isActive()) {
@@ -215,6 +218,16 @@ export function PressureProvider({ children }: { children: React.ReactNode }) {
     chatbotUplink.start();
     return () => chatbotUplink.stop();
   }, []);
+
+  // ---- Live readings to Supabase (real hardware only; see LiveCloudUplink) ----
+  useEffect(() => {
+    liveCloudUplink.start();
+    return () => liveCloudUplink.stop();
+  }, []);
+
+  useEffect(() => {
+    liveCloudUplink.setProfile(activeProfile);
+  }, [activeProfile]);
 
   // ---- BLE connection status ----
   useEffect(() => {

@@ -9,7 +9,7 @@ import {
  useWindowDimensions,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { Svg, Polyline, Defs, LinearGradient as SvgGradient } from 'react-native-svg';
+import { Svg, Polyline, Defs, LinearGradient as SvgGradient, Stop } from 'react-native-svg';
 import * as Haptics from 'expo-haptics';
 import { ScreenScaffold, Panel, Lbl, Body, Btn, StatTile } from '@/components/ui';
 import { color, font, space, radius, APP_MAX_WIDTH } from '@/theme/tokens';
@@ -81,6 +81,7 @@ export default function SessionDetailScreen() {
  const handleExport = async () => {
  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
  if (!id) return;
+ try {
  const uri = await exportSession(id);
  if (!uri) {
  Alert.alert('Error', 'Could not export session.');
@@ -91,6 +92,10 @@ export default function SessionDetailScreen() {
  await Sharing.shareAsync(uri);
  } else {
  Alert.alert('Export Ready', 'File saved to cache.');
+ }
+ } catch (e) {
+ console.warn('[SessionDetail] export failed:', e);
+ Alert.alert('Error', 'Could not export session.');
  }
  };
 
@@ -271,8 +276,8 @@ function PressureChart({
  <Svg height={height} width={width}>
  <Defs>
  <SvgGradient id="sessionArea" x1="0" y1="0" x2="0" y2="1">
- <stop offset="0" stopColor={color.cyan} stopOpacity="0.2" />
- <stop offset="1" stopColor={color.cyan} stopOpacity="0.0" />
+ <Stop offset="0" stopColor={color.cyan} stopOpacity="0.2" />
+ <Stop offset="1" stopColor={color.cyan} stopOpacity="0.0" />
  </SvgGradient>
  </Defs>
  <Polyline
